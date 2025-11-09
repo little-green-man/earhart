@@ -29,7 +29,7 @@ class AuthWebhookController
      */
     public function __invoke(Request $request)
     {
-        $data = $request->json();
+        $data = $request->json()->all();
 
         match ($data['type']) {
             'org.created' => OrgCreated::dispatch($data),
