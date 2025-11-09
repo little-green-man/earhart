@@ -1,0 +1,39 @@
+{
+  "name": "little-green-man/earhart",
+  "description": "A package to help use PropelAuth with Laravel",
+  "version": "1.0.0",
+  "keywords": [
+    "Little Green Man",
+    "laravel",
+    "Earhart",
+    "PropelAuth"
+  ],
+  "type": "library",
+  "license": "MIT",
+  "homepage": "https://github.com/little-green-man/earhart",
+  "authors": [
+    {
+      "name": "Elliot Ali",
+      "email": "elliot@lgm.ltd"
+    }
+  ],
+  "require": {
+    "php": "^8.4",
+    "illuminate/contracts": "^11.0||^12.0",
+    "illuminate/support": "^10.0|^11.0|^12.0",
+    "socialiteproviders/propelauth": "^4.0",
+    "svix/svix": "^1.81"
+  },
+  "autoload": {
+    "psr-4": {
+      "LittleGreenMan\\Earhart\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "LittleGreenMan\\Earhart\\ServiceProvider"
+      ]
+    }
+  }
+}
