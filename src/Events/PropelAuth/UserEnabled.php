@@ -7,7 +7,7 @@ use Illuminate\Foundation\Events\Dispatchable;
 class UserEnabled
 {
     use Dispatchable;
-    
+
     public string $user_id;
 
     /**
@@ -15,8 +15,7 @@ class UserEnabled
      */
     public function __construct(
         array $data
-    )
-    {
+    ) {
         $this->user_id = $data['user_id'];
     }
 }

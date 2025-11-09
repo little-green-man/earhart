@@ -1,7 +1,7 @@
 {
   "name": "little-green-man/earhart",
   "description": "A package to help use PropelAuth with Laravel",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "keywords": [
     "Little Green Man",
     "laravel",
@@ -18,15 +18,26 @@
     }
   ],
   "require": {
-    "php": "^8.4",
+    "php": "^8.3",
     "illuminate/contracts": "^11.0||^12.0",
-    "illuminate/support": "^10.0|^11.0|^12.0",
+    "illuminate/support": "^11.0|^12.0",
     "socialiteproviders/propelauth": "^4.0",
     "svix/svix": "^1.81"
+  },
+  "require-dev": {
+    "larastan/larastan": "^2.0",
+    "laravel/pint": "^1.0",
+    "pestphp/pest": "^1.23|^2.1|^3.1",
+    "orchestra/testbench": "^9.15"
   },
   "autoload": {
     "psr-4": {
       "LittleGreenMan\\Earhart\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "LittleGreenMan\\Earhart\\Tests\\": "tests"
     }
   },
   "extra": {
@@ -34,6 +45,11 @@
       "providers": [
         "LittleGreenMan\\Earhart\\ServiceProvider"
       ]
+    }
+  },
+  "config": {
+    "allow-plugins": {
+      "pestphp/pest-plugin": true
     }
   }
 }

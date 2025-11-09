@@ -1,6 +1,7 @@
 <?php
 
 namespace LittleGreenMan\Earhart\Events\PropelAuth;
+
 use Illuminate\Foundation\Events\Dispatchable;
 
 class OrgCreated
@@ -8,7 +9,9 @@ class OrgCreated
     use Dispatchable;
 
     public string $name;
+
     public string $org_id;
+
     /**
      * Create a new event instance.
      */

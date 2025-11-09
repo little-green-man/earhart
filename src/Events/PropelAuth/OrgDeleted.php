@@ -1,13 +1,15 @@
 <?php
 
 namespace LittleGreenMan\Earhart\Events\PropelAuth;
+
 use Illuminate\Foundation\Events\Dispatchable;
 
 class OrgDeleted
 {
     use Dispatchable;
 
-        public string $org_id;
+    public string $org_id;
+
     /**
      * Create a new event instance.
      */

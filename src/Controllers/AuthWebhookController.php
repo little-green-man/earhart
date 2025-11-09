@@ -2,10 +2,7 @@
 
 namespace LittleGreenMan\Earhart\Controllers;
 
-
-use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use LittleGreenMan\Earhart\Events\PropelAuth\OrgCreated;
 use LittleGreenMan\Earhart\Events\PropelAuth\OrgDeleted;
 use LittleGreenMan\Earhart\Events\PropelAuth\OrgUpdated;
@@ -18,9 +15,6 @@ use LittleGreenMan\Earhart\Events\PropelAuth\UserLocked;
 use LittleGreenMan\Earhart\Events\PropelAuth\UserRemovedFromOrg;
 use LittleGreenMan\Earhart\Events\PropelAuth\UserRoleChangedWithinOrg;
 use LittleGreenMan\Earhart\Events\PropelAuth\UserUpdated;
-use LittleGreenMan\Earhart\Middleware\VerifySvixWebhook;
-use Svix\Exception\WebhookVerificationException;
-use Svix\Webhook;
 
 class AuthWebhookController
 {
@@ -31,7 +25,7 @@ class AuthWebhookController
     {
         $data = $request->json()->all();
 
-        match ($data['type']) {
+        match ($data['event_type']) {
             'org.created' => OrgCreated::dispatch($data),
             'org.deleted' => OrgDeleted::dispatch($data),
             'org.updated' => OrgUpdated::dispatch($data),
@@ -48,7 +42,9 @@ class AuthWebhookController
             // Webhooks we don't handle yet
             // Feel free to raise a PR to add them!
             'org.api_key_deleted', 'org.saml_removed', 'org.saml_setup', 'org.saml_went_live', 'org.scim_group_created', 'org.scim_group_deleted', 'org.scim_group_updated', 'org.scim_key_created', 'org.scim_key_revoked', 'user.added_to_scim_group', 'user.deleted_personal_api_key', 'user.impersonated', 'user.invited_to_org', 'user.logged_out', 'user.login', 'user.removed_from_scim_group', 'user.send_mfa_phone_code' => null,
+            default => null,
         };
-        return response()->json(['message' => 'Webhook received', 'event_type' => $data['type']]);
+
+        return response()->json(['message' => 'Webhook received', 'event_type' => $data['event_type']]);
     }
 }

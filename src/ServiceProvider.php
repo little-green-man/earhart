@@ -8,20 +8,20 @@ class ServiceProvider extends BaseServiceProvider
 {
     public function boot()
     {
-//        $this->publishes([
-//            __DIR__ . '/../config/propelauth.php' => config_path('propelauth.php'),
-//        ], 'config');
-//        $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
+        //        $this->publishes([
+        //            __DIR__ . '/../config/propelauth.php' => config_path('propelauth.php'),
+        //        ], 'config');
+        //        $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
     }
 
     public function register()
     {
-//        $this->mergeConfigFrom(
-//            __DIR__ . '/../config/propelauth.php', 'propelauth'
-//        );
+        //        $this->mergeConfigFrom(
+        //            __DIR__ . '/../config/propelauth.php', 'propelauth'
+        //        );
 
-//        $this->app->singleton('earhart', function ($app) {
-//            return new PropelAuth(config('earhart'));
-//        });
+        //        $this->app->singleton('earhart', function ($app) {
+        //            return new PropelAuth(config('earhart'));
+        //        });
     }
 }

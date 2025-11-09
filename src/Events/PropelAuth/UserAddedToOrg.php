@@ -1,6 +1,7 @@
 <?php
 
 namespace LittleGreenMan\Earhart\Events\PropelAuth;
+
 use Illuminate\Foundation\Events\Dispatchable;
 
 class UserAddedToOrg
@@ -8,9 +9,11 @@ class UserAddedToOrg
     use Dispatchable;
 
     public string $user_id;
+
     public string $org_id;
 
     public string $role;
+
     /**
      * Create a new event instance.
      */
