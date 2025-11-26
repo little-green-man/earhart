@@ -1,7 +1,7 @@
 {
   "name": "little-green-man/earhart",
   "description": "A package to help use PropelAuth with Laravel",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "keywords": [
     "Little Green Man",
     "laravel",
@@ -22,7 +22,8 @@
     "illuminate/contracts": "^11.0||^12.0",
     "illuminate/support": "^11.0|^12.0",
     "socialiteproviders/propelauth": "^4.0",
-    "svix/svix": "^1.81"
+    "svix/svix": "^1.81",
+    "spatie/laravel-data": "^4.18"
   },
   "require-dev": {
     "larastan/larastan": "^2.0",

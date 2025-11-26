@@ -34,6 +34,7 @@ PROPELAUTH_CLIENT_SECRET="tbc"
 PROPELAUTH_CALLBACK_URL=https:///localhost/auth/callback
 PROPELAUTH_AUTH_URL=https://0000000000.propelauthtest.com
 PROPELAUTH_SVIX_SECRET="whsec_tbd"
+PROPELAUTH_API_KEY="tbc"
 ```
 
 ### 4. Prepare your database:
@@ -48,15 +49,12 @@ PROPELAUTH_SVIX_SECRET="whsec_tbd"
 ### 5. Add (and amemd as required) the following to your web.php routes file:
 
 ```php
-use LittleGreenMan\Earhart\Controllers\AuthRedirectController;
-use LittleGreenMan\Earhart\Controllers\AuthWebhookController;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Socialite\Facades\Socialite;
 
-Route::get('/auth/redirect', AuthRedirectController::class)->name('auth.redirect');
-Route::post('/auth/webhooks', AuthWebhookController::class)
+Route::post('/auth/webhooks', \LittleGreenMan\Earhart\Controllers\AuthWebhookController::class)
     ->withMiddleware(VerifySvixWebhook::class)
     ->withoutMiddleware('web')
     ->name('auth.webhook');
@@ -100,6 +98,15 @@ Route::get('/auth/logout', function(Request $request){
 })->name('auth.logout');
 ```
 
+Noting that the following routes are registered for you:
+
+- auth.redirect
+- auth.account
+- auth.settings
+- auth.org.create
+- auth.org.members
+- auth.org.settings
+
 ### 6. Add the Socialite event listener: 
 
 Add it to the `boot` method of your `AppServiceProvider`.
@@ -118,6 +125,16 @@ Event::listen(function (SocialiteWasCalled $event) {
 ```bladehtml
 <a href="{{ route('auth.redirect') }}">Login</a>
 <a href="{{ route('auth.logout') }}">Logout</a>
+```
+
+And optionally the following, which redirect to the relevant sections in PropelAuth:
+
+```bladehtml
+<a href="{{ route('auth.account') }}">Account</a>
+<a href="{{ route('auth.settings') }}">Account Settings</a>
+<a href="{{ route('auth.org.create') }}">Create Organisation</a>
+<a href="{{ route('auth.org.members') }}">Organisation Members</a>
+<a href="{{ route('auth.org.settings') }}">Organisation Settings</a>
 ```
 
 ### 8. Optionally, set up Listeners in your app for the following events:
@@ -159,6 +176,19 @@ class PropelAuthOrgCreatedListener
 }
 ```
 
+## PropelAuth API Usage
+
+Note: This is still a work in progress.
+
+Within your app, you can use the following code to interrogate the PropelAuth API, for example in response to
+an event:
+
+```php
+$orgs = app('earhart')->getOrganisations();
+$org = app('earhart')->getOrganisation('org_uuid');
+$users = app('earhart')->getUsersInOrganisation('org_uuid');
+```
+
 ## Changelog
 
 Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed recently.
@@ -173,7 +203,7 @@ Please review [our security policy](../../security/policy) on how to report secu
 
 ## Credits
 
-- [:author_name](https://github.com/:author_username)
+- [Elliot](https://github.com/kurucu)
 - [All Contributors](../../contributors)
 
 ## License
