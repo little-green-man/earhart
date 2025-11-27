@@ -5,6 +5,7 @@ namespace LittleGreenMan\Earhart;
 use Illuminate\Support\Facades\Http;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationData;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationsData;
+use LittleGreenMan\Earhart\PropelAuth\UserData;
 use LittleGreenMan\Earhart\PropelAuth\UsersData;
 
 class Earhart
@@ -16,9 +17,11 @@ class Earhart
         protected string $authUrl,
         protected string $svixSecret,
         protected string $apiKey
-    ) {}
+    ) {
+    }
 
-    public function getOrganisations(){
+    public function getOrganisations()
+    {
         return OrganisationsData::from(
             Http::withToken($this->apiKey)
                 ->get($this->authUrl . '/api/backend/v1/org/query', [
@@ -27,7 +30,8 @@ class Earhart
         );
     }
 
-    public function getOrganisation(string $id){
+    public function getOrganisation(string $id)
+    {
         return OrganisationData::from(
             Http::withToken($this->apiKey)->get($this->authUrl . '/api/backend/v1/org/' . $id)->json()
         );
@@ -44,4 +48,11 @@ class Earhart
         );
     }
 
+    public function getUser(string $userId)
+    {
+        return UserData::from(
+            Http::withToken($this->apiKey)
+                ->get($this->authUrl . '/api/backend/v1/user/' . $userId)->json()
+        );
+    }
 }

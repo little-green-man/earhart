@@ -2,6 +2,9 @@
 
 All notable changes to `earhart` will be documented in this file.
 
+# v1.3.0
+- Added getUser method
+
 # v1.2.0
 - Added an initial API library to support getting Organisations, an Organisation and Users in an Organisation.
 - Added routes:
