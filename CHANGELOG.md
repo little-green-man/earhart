@@ -2,6 +2,20 @@
 
 All notable changes to `earhart` will be documented in this file.
 
+## [1.5.0] - 2025
+
+### Added
+- **Token Refresh Documentation**: Comprehensive guide for implementing automatic PropelAuth token refresh
+  - New `REFRESHING_USER_TOKENS.md` guide with production-ready example job
+  - Complete `RefreshUserTokenJob` example that can be customized for different token storage implementations
+  - Detailed instructions for adding the job to Laravel's scheduler
+  - Examples for different token storage approaches (database columns, separate tables, cache/Redis)
+  - Organization membership syncing examples
+  - Error handling and monitoring patterns
+  - Security best practices and troubleshooting guide
+  - Test examples for validating the implementation
+- **README Enhancement**: Added "Refreshing User Tokens" section linking to the comprehensive guide
+
 ## [1.4.1] - 2025
 
 ### Fixed

@@ -172,6 +172,20 @@ And optionally the following, which redirect to the relevant sections in PropelA
 <a href="{{ route('auth.org.settings') }}">Organisation Settings</a>
 ```
 
+## Refreshing User Tokens
+
+PropelAuth access tokens expire after 30 minutes. To keep user tokens fresh and prevent authentication failures, you should set up a scheduled job to refresh them automatically.
+
+**See [REFRESHING_USER_TOKENS.md](REFRESHING_USER_TOKENS.md) for a complete, production-ready example job and setup instructions.**
+
+The guide includes:
+- A ready-to-use `RefreshUserTokenJob` that you can customize for your implementation
+- Instructions for adding the job to your Laravel scheduler
+- Examples for different token storage approaches
+- Error handling and monitoring tips
+- Security best practices
+- Troubleshooting guide
+
 ## Registered Routes
 
 The following routes are registered automatically:
