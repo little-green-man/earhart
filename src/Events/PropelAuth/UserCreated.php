@@ -27,9 +27,8 @@ class UserCreated
     /**
      * Create a new event instance.
      */
-    public function __construct(
-        array $data
-    ) {
+    public function __construct(array $data)
+    {
         $this->email = $data['email'];
         $this->email_confirmed = $data['email_confirmed'];
         $this->event_type = $data['event_type'];

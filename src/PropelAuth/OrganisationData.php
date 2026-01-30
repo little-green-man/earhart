@@ -2,22 +2,59 @@
 
 namespace LittleGreenMan\Earhart\PropelAuth;
 
+use Carbon\Carbon;
+use LittleGreenMan\Earhart\CarbonFromTimestampCast;
+use Spatie\LaravelData\Attributes\WithCast;
 use Spatie\LaravelData\Data;
 
 class OrganisationData extends Data
 {
     public function __construct(
-        public string $org_id,
-        public string $name,
-        public ?string $url_safe_org_slug,
-        public ?bool   $can_setup_saml,
-        public bool   $is_saml_configured,
-        public ?bool   $is_saml_in_test_mode,
-        public ?array  $extra_domains,
-        public ?bool   $domain_autojoin,
-        public ?bool   $domain_restrict,
-        public string $custom_role_mapping_name,
+        public string $orgId,
+        public string $displayName,
+        public ?string $urlSafeOrgSlug,
+        public ?bool $canSetupSaml,
+        public bool $isSamlConfigured,
+        public ?bool $isSamlInTestMode,
+        public ?array $extraDomains,
+        public ?bool $domainAutojoin,
+        public ?bool $domainRestrict,
+        public string $customRoleMappingName,
+        #[WithCast(CarbonFromTimestampCast::class)]
+        public ?\DateTime $createdAt = null,
+        public ?array $metadata = null,
+        public ?int $maxOrgMembers = null,
     ) {}
-}
 
-//Parameters missing: url_safe_org_slug, can_setup_saml, is_saml_in_test_mode, extra_domains, domain_autojoin, domain_restrict.
+    /**
+     * Create an OrganisationData instance from an array response.
+     */
+    public static function fromArray(array $data): self
+    {
+        return new self(
+            orgId: $data['orgId'],
+            displayName: $data['displayName'],
+            urlSafeOrgSlug: $data['urlSafeOrgSlug'] ?? null,
+            canSetupSaml: $data['canSetupSaml'] ?? null,
+            isSamlConfigured: $data['isSamlConfigured'] ?? false,
+            isSamlInTestMode: $data['isSamlInTestMode'] ?? null,
+            extraDomains: $data['extraDomains'] ?? null,
+            domainAutojoin: $data['domainAutojoin'] ?? null,
+            domainRestrict: $data['domainRestrict'] ?? null,
+            customRoleMappingName: $data['customRoleMappingName'] ?? 'default',
+            createdAt: isset($data['createdAt']) ? Carbon::createFromTimestamp($data['createdAt']) : null,
+            metadata: $data['metadata'] ?? null,
+            maxOrgMembers: $data['maxOrgMembers'] ?? null,
+        );
+    }
+
+    public static function normalizers(): array
+    {
+        return [];
+    }
+
+    public static function transformers(): array
+    {
+        return [];
+    }
+}

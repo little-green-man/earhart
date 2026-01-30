@@ -1,0 +1,268 @@
+<?php
+
+namespace LittleGreenMan\Earhart\Tests\Unit\Middleware;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
+use LittleGreenMan\Earhart\Middleware\VerifyPropelAuthUser;
+use LittleGreenMan\Earhart\PropelAuth\UserData;
+use LittleGreenMan\Earhart\Services\UserService;
+use LittleGreenMan\Earhart\Tests\TestCase;
+
+uses(TestCase::class);
+
+describe('VerifyPropelAuthUser', function () {
+    function mockUserData(): array
+    {
+        return [
+            'user_id' => 'user123',
+            'email' => 'test@example.com',
+            'email_confirmed' => true,
+            'first_name' => 'John',
+            'last_name' => 'Doe',
+            'username' => 'johndoe',
+            'picture_url' => 'https://example.com/pic.jpg',
+            'properties' => [],
+            'locked' => false,
+            'enabled' => true,
+            'has_password' => true,
+            'update_password_required' => false,
+            'mfa_enabled' => false,
+            'can_create_orgs' => true,
+            'created_at' => 1609459200,
+            'last_active_at' => 1609459200,
+        ];
+    }
+
+    function createUserMiddleware(?UserService $userService = null): VerifyPropelAuthUser
+    {
+        if (! $userService) {
+            $userService = mock(UserService::class);
+        }
+
+        return new VerifyPropelAuthUser($userService);
+    }
+
+    test('allows requests with valid bearer token', function () {
+        $userData = mockUserData();
+        $userService = mock(UserService::class)
+            ->shouldReceive('validateToken')
+            ->with('valid-token')
+            ->andReturn(UserData::fromArray($userData))
+            ->getMock();
+
+        $middleware = createUserMiddleware($userService);
+        $request = Request::create(
+            '/',
+            'GET',
+            [],
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer valid-token',
+            ],
+        );
+
+        $response = $middleware->handle($request, fn ($req) => response('OK'));
+
+        expect($response->getStatusCode())->toBe(200);
+        expect($request->attributes->get('propelauth_user'))->toBeInstanceOf(UserData::class);
+    });
+
+    test('allows requests with session cookie', function () {
+        $userData = mockUserData();
+        $userService = mock(UserService::class)
+            ->shouldReceive('validateToken')
+            ->with('session-token')
+            ->andReturn(UserData::fromArray($userData))
+            ->getMock();
+
+        $middleware = createUserMiddleware($userService);
+        $request = Request::create('/', 'GET', [], ['propelauth_session' => 'session-token']);
+
+        $response = $middleware->handle($request, fn ($req) => response('OK'));
+
+        expect($response->getStatusCode())->toBe(200);
+    });
+
+    test('rejects requests without token', function () {
+        $userService = mock(UserService::class);
+        $middleware = createUserMiddleware($userService);
+        $request = Request::create('/', 'GET');
+
+        $response = $middleware->handle($request, fn ($req) => response('OK'));
+
+        expect($response->getStatusCode())->toBe(Response::HTTP_UNAUTHORIZED);
+        $data = json_decode($response->getContent(), true);
+        expect($data['error'])->toBe('Unauthorized');
+    });
+
+    test('rejects requests with invalid token', function () {
+        $userService = mock(UserService::class)
+            ->shouldReceive('validateToken')
+            ->with('invalid-token')
+            ->andThrow(InvalidUserException::notFound('user'))
+            ->getMock();
+
+        $middleware = createUserMiddleware($userService);
+        $request = Request::create(
+            '/',
+            'GET',
+            [],
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer invalid-token',
+            ],
+        );
+
+        $response = $middleware->handle($request, fn ($req) => response('OK'));
+
+        expect($response->getStatusCode())->toBe(Response::HTTP_UNAUTHORIZED);
+        $data = json_decode($response->getContent(), true);
+        expect($data['error'])->toBe('Unauthorized');
+    });
+
+    test('rejects requests with disabled user', function () {
+        $userData = array_merge(mockUserData(), ['enabled' => false]);
+        $userService = mock(UserService::class)
+            ->shouldReceive('validateToken')
+            ->with('valid-token')
+            ->andReturn(UserData::fromArray($userData))
+            ->getMock();
+
+        $middleware = createUserMiddleware($userService);
+        $request = Request::create(
+            '/',
+            'GET',
+            [],
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer valid-token',
+            ],
+        );
+
+        $response = $middleware->handle($request, fn ($req) => response('OK'));
+
+        expect($response->getStatusCode())->toBe(Response::HTTP_FORBIDDEN);
+        $data = json_decode($response->getContent(), true);
+        expect($data['message'])->toContain('disabled');
+    });
+
+    test('injects user into request', function () {
+        $userData = mockUserData();
+        $userService = mock(UserService::class)
+            ->shouldReceive('validateToken')
+            ->andReturn(UserData::fromArray($userData))
+            ->getMock();
+
+        $middleware = createUserMiddleware($userService);
+        $request = Request::create(
+            '/',
+            'GET',
+            [],
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer valid-token',
+            ],
+        );
+
+        $passedRequest = null;
+        $middleware->handle($request, function ($req) use (&$passedRequest) {
+            $passedRequest = $req;
+
+            return response('OK');
+        });
+
+        expect($passedRequest->attributes->get('propelauth_user'))->toBeInstanceOf(UserData::class);
+        expect($passedRequest->user())->toBeInstanceOf(UserData::class);
+    });
+
+    test('extracts token from query parameter', function () {
+        $userData = mockUserData();
+        $userService = mock(UserService::class)
+            ->shouldReceive('validateToken')
+            ->with('query-token')
+            ->andReturn(UserData::fromArray($userData))
+            ->getMock();
+
+        $middleware = createUserMiddleware($userService);
+        $request = Request::create('/', 'GET', ['token' => 'query-token']);
+
+        $response = $middleware->handle($request, fn ($req) => response('OK'));
+
+        expect($response->getStatusCode())->toBe(200);
+    });
+
+    test('prioritizes bearer token over cookie', function () {
+        $userData = mockUserData();
+        $userService = mock(UserService::class)
+            ->shouldReceive('validateToken')
+            ->with('bearer-token')
+            ->andReturn(UserData::fromArray($userData))
+            ->getMock();
+
+        $middleware = createUserMiddleware($userService);
+        $request = Request::create(
+            '/',
+            'GET',
+            [],
+            ['propelauth_session' => 'cookie-token'],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer bearer-token',
+            ],
+        );
+
+        $response = $middleware->handle($request, fn ($req) => response('OK'));
+
+        expect($response->getStatusCode())->toBe(200);
+    });
+
+    test('handles api exceptions gracefully', function () {
+        $userService = mock(UserService::class)
+            ->shouldReceive('validateToken')
+            ->andThrow(new \Exception('API Error'))
+            ->getMock();
+
+        $middleware = createUserMiddleware($userService);
+        $request = Request::create(
+            '/',
+            'GET',
+            [],
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer valid-token',
+            ],
+        );
+
+        $response = $middleware->handle($request, fn ($req) => response('OK'));
+
+        expect($response->getStatusCode())->toBe(Response::HTTP_UNAUTHORIZED);
+        $data = json_decode($response->getContent(), true);
+        expect($data['message'])->toContain('API Error');
+    });
+
+    test('requires bearer prefix in authorization header', function () {
+        $userService = mock(UserService::class);
+        $middleware = createUserMiddleware($userService);
+        $request = Request::create(
+            '/',
+            'GET',
+            [],
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Basic invalid-token',
+            ],
+        );
+
+        $response = $middleware->handle($request, fn ($req) => response('OK'));
+
+        expect($response->getStatusCode())->toBe(Response::HTTP_UNAUTHORIZED);
+    });
+});

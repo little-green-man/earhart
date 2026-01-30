@@ -3,7 +3,6 @@
 namespace LittleGreenMan\Earhart\Controllers;
 
 use Illuminate\Http\Request;
-use Laravel\Socialite\Facades\Socialite;
 
 class AuthAccountController
 {
