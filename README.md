@@ -123,8 +123,6 @@ Route::get('/auth/callback', function(Request $request){
 })->name('auth.callback');
 
 Route::get('/auth/logout', function(Request $request){
-    Auth::logout();
-
     $response = Http::withHeaders([
         'Content-Type' => 'application/json',
     ])->post(config('services.propelauth.auth_url') . '/api/backend/v1/logout', [
@@ -134,6 +132,8 @@ Route::get('/auth/logout', function(Request $request){
     if ($response->failed()) {
         Log::debug('Failed to log out from PropelAuth', ['response' => $response->body()]);
     }
+
+    Auth::logout();
 
     return redirect('/');
 })->name('auth.logout');
