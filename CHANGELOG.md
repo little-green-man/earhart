@@ -2,6 +2,11 @@
 
 All notable changes to `earhart` will be documented in this file.
 
+## [1.4.1] - 2025
+
+### Fixed
+- **Documentation**: Added clarifying comment in logout route example to prevent confusion about Auth::logout() execution order. Fetch refresh token BEFORE calling Auth::logout() to avoid "Attempt to read property 'propel_refresh_token' on null" error.
+
 ## [1.4.0] - 2024
 
 ### Added

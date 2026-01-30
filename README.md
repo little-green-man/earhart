@@ -123,6 +123,9 @@ Route::get('/auth/callback', function(Request $request){
 })->name('auth.callback');
 
 Route::get('/auth/logout', function(Request $request){
+    // IMPORTANT: Fetch the refresh token BEFORE calling Auth::logout()
+    // Calling Auth::logout() first will clear the authenticated user, resulting in:
+    // "Attempt to read property 'propel_refresh_token' on null"
     $response = Http::withHeaders([
         'Content-Type' => 'application/json',
     ])->post(config('services.propelauth.auth_url') . '/api/backend/v1/logout', [
