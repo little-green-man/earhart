@@ -2,24 +2,12 @@
 
 namespace LittleGreenMan\Earhart\Services;
 
-use Illuminate\Support\Facades\Http;
 use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
-use LittleGreenMan\Earhart\Exceptions\RateLimitException;
 use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
 
-class UserService
+class UserService extends BaseApiService
 {
-    private int $maxRetries = 3;
-
-    private int $initialRetryDelay = 1; // seconds
-
-    public function __construct(
-        protected string $apiKey,
-        protected string $authUrl,
-        protected CacheService $cache,
-    ) {}
-
     /**
      * Fetch user by ID with optional caching.
      */
@@ -105,6 +93,13 @@ class UserService
         );
 
         $response = $this->makeRequest('GET', '/api/backend/v1/user/query', $params);
+
+        // Convert arrays to UserData objects for consistency
+        $users = array_map(
+            fn ($user) => UserData::fromArray($user),
+            $response['users'] ?? []
+        );
+        $response['items'] = $users;
 
         return PaginatedResult::from($response, fn (int $nextPage) => $this->queryUsers(
             $emailOrUsername,
@@ -401,79 +396,5 @@ class UserService
         }
 
         return UserData::fromArray($response);
-    }
-
-    /**
-     * Make an HTTP request with retry logic.
-     *
-     * @param  array<string, mixed>  $data
-     * @return array<string, mixed>
-     */
-    protected function makeRequest(string $method, string $endpoint, array $data = []): array
-    {
-        return $this->executeWithRetry(fn () => $this->sendRequest($method, $endpoint, $data));
-    }
-
-    /**
-     * Send HTTP request to PropelAuth API.
-     *
-     * @param  array<string, mixed>  $data
-     * @return array<string, mixed>
-     */
-    protected function sendRequest(string $method, string $endpoint, array $data = []): array
-    {
-        $request = Http::withToken($this->apiKey)->withHeaders(['Content-Type' => 'application/json'])->timeout(30);
-
-        $response = match ($method) {
-            'GET' => $request->get($this->authUrl.$endpoint, $data),
-            'POST' => $request->post($this->authUrl.$endpoint, $data),
-            'PUT' => $request->put($this->authUrl.$endpoint, $data),
-            'DELETE' => $request->delete($this->authUrl.$endpoint),
-            default => throw new \InvalidArgumentException("Unsupported method: {$method}"),
-        };
-
-        if ($response->status() === 429) {
-            throw RateLimitException::fromHeaders($response->header('Retry-After'));
-        }
-
-        // Allow 404 to pass through - let callers handle it
-        // But throw for other error responses
-        if ($response->failed() && $response->status() !== 404) {
-            throw new \Exception("PropelAuth API error: {$response->status()} - {$response->body()}");
-        }
-
-        $json = $response->json();
-        if (! is_array($json)) {
-            $json = [];
-        }
-
-        return $json + ['status' => $response->status()];
-    }
-
-    /**
-     * Execute request with automatic retry logic.
-     */
-    protected function executeWithRetry(\Closure $callback): mixed
-    {
-        $attempt = 0;
-        $lastException = null;
-
-        while ($attempt < $this->maxRetries) {
-            try {
-                return $callback();
-            } catch (RateLimitException $e) {
-                $lastException = $e;
-                $attempt++;
-
-                if ($attempt >= $this->maxRetries) {
-                    break;
-                }
-
-                $delay = $this->initialRetryDelay * (2 ** ($attempt - 1));
-                sleep($delay);
-            }
-        }
-
-        throw $lastException ?? new \Exception('Max retries exceeded');
     }
 }

@@ -38,7 +38,7 @@ class WebhookEventEnricherTest extends TestCase
     public function test_enrich_user_data_fetches_and_caches()
     {
         $userMock = Mockery::mock(UserData::class);
-        $userMock->user_id = 'user_123';
+        $userMock->userId = 'user_123';
         $userMock->email = 'john@example.com';
 
         $this->userService
@@ -50,7 +50,7 @@ class WebhookEventEnricherTest extends TestCase
         $result = $this->enricher->getUserData('user_123');
 
         $this->assertInstanceOf(UserData::class, $result);
-        $this->assertEquals('user_123', $result->user_id);
+        $this->assertEquals('user_123', $result->userId);
     }
 
     /**
@@ -79,7 +79,7 @@ class WebhookEventEnricherTest extends TestCase
     public function test_user_data_caching_prevents_duplicate_calls()
     {
         $userMock = Mockery::mock(UserData::class);
-        $userMock->user_id = 'user_123';
+        $userMock->userId = 'user_123';
 
         $this->userService
             ->shouldReceive('getUser')
@@ -91,9 +91,9 @@ class WebhookEventEnricherTest extends TestCase
         $result2 = $this->enricher->getUserData('user_123');
         $result3 = $this->enricher->getUserData('user_123');
 
-        $this->assertEquals('user_123', $result1->user_id);
-        $this->assertEquals('user_123', $result2->user_id);
-        $this->assertEquals('user_123', $result3->user_id);
+        $this->assertEquals('user_123', $result1->userId);
+        $this->assertEquals('user_123', $result2->userId);
+        $this->assertEquals('user_123', $result3->userId);
         $this->assertSame($result1, $result2);
         $this->assertSame($result2, $result3);
     }
@@ -156,7 +156,7 @@ class WebhookEventEnricherTest extends TestCase
         $event->created_by = 'user_789';
 
         $userMock = Mockery::mock(UserData::class);
-        $userMock->user_id = 'user_789';
+        $userMock->userId = 'user_789';
 
         $this->userService
             ->shouldReceive('getUser')
@@ -167,7 +167,7 @@ class WebhookEventEnricherTest extends TestCase
         $result = $this->enricher->enrichUserData($event, 'created_by');
 
         $this->assertInstanceOf(UserData::class, $result);
-        $this->assertEquals('user_789', $result->user_id);
+        $this->assertEquals('user_789', $result->userId);
     }
 
     /**
@@ -199,7 +199,7 @@ class WebhookEventEnricherTest extends TestCase
     public function test_clear_cache_removes_all_cached_data()
     {
         $userMock = Mockery::mock(UserData::class);
-        $userMock->user_id = 'user_123';
+        $userMock->userId = 'user_123';
 
         $this->userService
             ->shouldReceive('getUser')
@@ -223,10 +223,10 @@ class WebhookEventEnricherTest extends TestCase
     public function test_clear_user_cache_removes_specific_user()
     {
         $user1Mock = Mockery::mock(UserData::class);
-        $user1Mock->user_id = 'user_1';
+        $user1Mock->userId = 'user_1';
 
         $user2Mock = Mockery::mock(UserData::class);
-        $user2Mock->user_id = 'user_2';
+        $user2Mock->userId = 'user_2';
 
         $this->userService->shouldReceive('getUser')->andReturn($user1Mock, $user2Mock);
 
@@ -265,7 +265,7 @@ class WebhookEventEnricherTest extends TestCase
     public function test_get_cached_user_count()
     {
         $userMock = Mockery::mock(UserData::class);
-        $userMock->user_id = 'user_123';
+        $userMock->userId = 'user_123';
 
         $this->userService->shouldReceive('getUser')->andReturn($userMock);
 
@@ -360,10 +360,10 @@ class WebhookEventEnricherTest extends TestCase
     public function test_multiple_users_and_orgs_cached_simultaneously()
     {
         $user1Mock = Mockery::mock(UserData::class);
-        $user1Mock->user_id = 'user_1';
+        $user1Mock->userId = 'user_1';
 
         $user2Mock = Mockery::mock(UserData::class);
-        $user2Mock->user_id = 'user_2';
+        $user2Mock->userId = 'user_2';
 
         $org1Mock = Mockery::mock(OrganisationData::class);
         $org1Mock->orgId = 'org_1';
@@ -400,7 +400,7 @@ class WebhookEventEnricherTest extends TestCase
         ]);
 
         $userMock = Mockery::mock(UserData::class);
-        $userMock->user_id = 'user_123';
+        $userMock->userId = 'user_123';
 
         $this->userService
             ->shouldReceive('getUser')
@@ -411,6 +411,6 @@ class WebhookEventEnricherTest extends TestCase
         $result = $this->enricher->enrichUserData($event);
 
         $this->assertInstanceOf(UserData::class, $result);
-        $this->assertEquals('user_123', $result->user_id);
+        $this->assertEquals('user_123', $result->userId);
     }
 }

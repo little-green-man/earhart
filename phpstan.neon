@@ -39,5 +39,10 @@ parameters:
 
         # Mockery mock object property access in tests
         -
-            message: '#Access to an undefined property Mockery\\MockInterface::\$(user_id|email|orgId)#'
+            message: '#Access to an undefined property Mockery\\MockInterface::\$(userId|email|orgId)#'
             path: tests/Unit/Webhooks/WebhookEventEnricherTest.php
+
+        # Pest test dynamic property access in CaseConversionTest
+        -
+            message: '#Access to an undefined property PHPUnit\\Framework\\TestCase::\$service#'
+            path: tests/Unit/CaseConversionTest.php

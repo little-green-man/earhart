@@ -60,7 +60,7 @@ describe('UserService', function () {
 
             expect($user)
                 ->toBeInstanceOf(UserData::class)
-                ->and($user->user_id)
+                ->and($user->userId)
                 ->toBe('user123')
                 ->and($user->email)
                 ->toBe('test@example.com');
@@ -124,7 +124,7 @@ describe('UserService', function () {
             Http::assertSent(function ($request) {
                 return
                     $request->url()
-                    === 'https://auth.example.com/api/backend/v1/user/email?email=test%40example.com&includeOrgs=1';
+                    === 'https://auth.example.com/api/backend/v1/user/email?email=test%40example.com&include_orgs=true';
             });
         })->group('integration', 'slow');
     });
@@ -192,7 +192,7 @@ describe('UserService', function () {
             $service->queryUsers(emailOrUsername: 'john');
 
             Http::assertSent(function ($request) {
-                return str_contains($request->url(), 'emailOrUsername=john');
+                return str_contains($request->url(), 'email_or_username=john');
             });
         })->group('integration', 'slow');
 
@@ -211,7 +211,7 @@ describe('UserService', function () {
             $service->queryUsers(orderBy: 'EMAIL');
 
             Http::assertSent(function ($request) {
-                return str_contains($request->url(), 'orderBy=EMAIL');
+                return str_contains($request->url(), 'order_by=EMAIL');
             });
         })->group('integration', 'slow');
     });
@@ -253,11 +253,11 @@ describe('UserService', function () {
 
                 return
                     $data['email'] === 'test@example.com'
-                    && $data['firstName'] === 'John'
-                    && $data['lastName'] === 'Doe'
+                    && $data['first_name'] === 'John'
+                    && $data['last_name'] === 'Doe'
                     && $data['username'] === 'johndoe'
                     && $data['password'] === 'password123'
-                    && $data['sendEmailToConfirmEmailAddress'] === true;
+                    && $data['send_email_to_confirm_email_address'] === true;
             });
         })->group('integration', 'slow');
     });
@@ -298,7 +298,7 @@ describe('UserService', function () {
             Http::assertSent(function ($request) {
                 $data = $request->data();
 
-                return isset($data['firstName']) && isset($data['pictureUrl']) && ! isset($data['lastName']);
+                return isset($data['first_name']) && isset($data['picture_url']) && ! isset($data['last_name']);
             });
         })->group('integration', 'slow');
     });
@@ -324,7 +324,7 @@ describe('UserService', function () {
             $service->updateUserEmail('user123', 'newemail@example.com');
 
             Http::assertSent(function ($request) {
-                return $request->data()['requireEmailConfirmation'] === true;
+                return $request->data()['require_email_confirmation'] === true;
             });
         })->group('integration', 'slow');
     });
@@ -380,7 +380,7 @@ describe('UserService', function () {
             $service->createMagicLink('test@example.com', redirectUrl: 'https://myapp.com/dashboard');
 
             Http::assertSent(function ($request) {
-                return $request->data()['redirectToUrl'] === 'https://myapp.com/dashboard';
+                return $request->data()['redirect_to_url'] === 'https://myapp.com/dashboard';
             });
         })->group('integration', 'slow');
     });
@@ -410,7 +410,7 @@ describe('UserService', function () {
             $service->createAccessToken('user123');
 
             Http::assertSent(function ($request) {
-                return $request->data()['durationInMinutes'] === 1440;
+                return $request->data()['duration_in_minutes'] === 1440;
             });
         })->group('integration', 'slow');
     });
@@ -530,9 +530,9 @@ describe('UserService', function () {
 
                 return
                     $data['email'] === 'migrated@example.com'
-                    && $data['emailConfirmed'] === true
-                    && $data['existingUserId'] === 'old-id-123'
-                    && $data['existingPasswordHash'] === 'hash123';
+                    && $data['email_confirmed'] === true
+                    && $data['existing_user_id'] === 'old-id-123'
+                    && $data['existing_password_hash'] === 'hash123';
             });
         })->group('integration', 'slow');
     });

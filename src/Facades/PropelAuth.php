@@ -27,7 +27,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static bool migrateUserPassword(string $userId, string $passwordHash)
  * @method static \LittleGreenMan\Earhart\PropelAuth\OrganisationData getOrganisation(string $id)
  * @method static \LittleGreenMan\Earhart\PropelAuth\OrganisationsData getOrganisations(int $pageSize = 1000)
- * @method static \LittleGreenMan\Earhart\PropelAuth\UsersData getUsersInOrganisation(string $organisationId)
+ * @method static array<\LittleGreenMan\Earhart\PropelAuth\UserData> getUsersInOrganisation(string $organisationId)
  * @method static void invalidateUserCache(string $userId)
  * @method static void invalidateOrgCache(string $orgId)
  * @method static void flushCache()

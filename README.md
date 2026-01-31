@@ -255,7 +255,13 @@ Use the PropelAuth API within your application:
 ```php
 $orgs = app('earhart')->getOrganisations();
 $org = app('earhart')->getOrganisation('org_uuid');
+
+// Returns array of UserData objects
 $users = app('earhart')->getUsersInOrganisation('org_uuid');
+
+// For pagination control, use the service directly:
+$result = app('earhart')->organisations()->getOrganisationUsers('org_uuid', pageSize: 50);
+// $result is PaginatedResult with totalItems, hasMoreResults, etc.
 ```
 
 See [USING_PROPEL_API.md](docs/USING_PROPEL_API.md) for complete API documentation.

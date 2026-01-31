@@ -9,7 +9,7 @@ describe('OrganisationData', function () {
     {
         return [
             'orgId' => 'org123',
-            'displayName' => 'Acme Corp',
+            'name' => 'Acme Corp',
             'urlSafeOrgSlug' => 'acme-corp',
             'canSetupSaml' => true,
             'isSamlConfigured' => false,
@@ -62,7 +62,7 @@ describe('OrganisationData', function () {
     test('handles optional fields', function () {
         $data = [
             'orgId' => 'org456',
-            'displayName' => 'Simple Org',
+            'name' => 'Simple Org',
             'customRoleMappingName' => 'default',
             'isSamlConfigured' => true,
         ];
@@ -84,7 +84,7 @@ describe('OrganisationData', function () {
     test('has proper default values for optional fields', function () {
         $data = [
             'orgId' => 'org789',
-            'displayName' => 'Test Org',
+            'name' => 'Test Org',
             'isSamlConfigured' => true,
             'customRoleMappingName' => 'default',
         ];
@@ -163,7 +163,7 @@ describe('OrganisationData', function () {
         expect($org->orgId)
             ->toBe($data['orgId'])
             ->and($org->displayName)
-            ->toBe($data['displayName'])
+            ->toBe($data['name'])
             ->and($org->urlSafeOrgSlug)
             ->toBe($data['urlSafeOrgSlug'])
             ->and($org->canSetupSaml)

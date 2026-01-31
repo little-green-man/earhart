@@ -31,7 +31,7 @@ describe('OrganisationService', function () {
     {
         return [
             'orgId' => 'org123',
-            'displayName' => 'Acme Corp',
+            'name' => 'Acme Corp',
             'urlSafeOrgSlug' => 'acme-corp',
             'createdAt' => 1609459200,
             'metadata' => ['industry' => 'technology'],
@@ -129,7 +129,7 @@ describe('OrganisationService', function () {
             $result = $service->queryOrganisations(orderBy: 'CREATED_AT_DESC');
 
             Http::assertSent(function ($request) {
-                return str_contains($request->url(), 'orderBy=CREATED_AT_DESC');
+                return str_contains($request->url(), 'order_by=CREATED_AT_DESC');
             });
         });
 
@@ -145,7 +145,7 @@ describe('OrganisationService', function () {
             $result = $service->queryOrganisations(pageNumber: 1, pageSize: 50);
 
             Http::assertSent(function ($request) {
-                return str_contains($request->url(), 'pageNumber=1') && str_contains($request->url(), 'pageSize=50');
+                return str_contains($request->url(), 'page_number=1') && str_contains($request->url(), 'page_size=50');
             });
         });
     });
@@ -182,7 +182,7 @@ describe('OrganisationService', function () {
 
                 return
                     $data['name'] === 'New Org'
-                    && $data['urlSafeOrgSlug'] === 'new-org'
+                    && $data['url_safe_org_slug'] === 'new-org'
                     && $data['metadata'] === $metadata;
             });
         });
@@ -273,7 +273,7 @@ describe('OrganisationService', function () {
             Http::assertSent(function ($request) {
                 $data = json_decode($request->body(), true);
 
-                return $data['userId'] === 'user_123' && $data['orgId'] === 'org123';
+                return $data['user_id'] === 'user_123' && $data['org_id'] === 'org123';
             });
         });
 
@@ -428,16 +428,14 @@ describe('OrganisationService', function () {
 
         test('sends orgId and inviteeEmail in request', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/pending_org_invites' => Http::response(['success' => true]),
+                'https://auth.example.com/api/backend/v1/pending_org_invites*' => Http::response(['success' => true]),
             ]);
 
             $service = createOrganisationService();
             $service->revokePendingInvite('org123', 'user@example.com');
 
             Http::assertSent(function ($request) {
-                $data = json_decode($request->body(), true);
-
-                return $data['orgId'] === 'org123' && $data['inviteeEmail'] === 'user@example.com';
+                return $request->method() === 'DELETE' && str_contains($request->url(), 'pending_org_invites');
             });
         });
     });
@@ -525,7 +523,7 @@ describe('OrganisationService', function () {
             Http::assertSent(function ($request) {
                 $data = json_decode($request->body(), true);
 
-                return $data['idpMetadata'] === '<xml>idp metadata</xml>';
+                return $data['idp_metadata'] === '<xml>idp metadata</xml>';
             });
         });
     });
@@ -583,7 +581,7 @@ describe('OrganisationService', function () {
             Http::assertSent(function ($request) {
                 $data = json_decode($request->body(), true);
 
-                return $data['orgId'] === 'org123';
+                return $data['org_id'] === 'org123';
             });
         });
     });

@@ -10,24 +10,24 @@ use Spatie\LaravelData\Data;
 class UserData extends Data
 {
     public function __construct(
-        public string $user_id,
+        public string $userId,
         public string $email,
-        public bool $email_confirmed,
-        public string $first_name,
-        public string $last_name,
+        public bool $emailConfirmed,
+        public ?string $firstName,
+        public ?string $lastName,
         public ?string $username,
-        public string $picture_url,
+        public string $pictureUrl,
         public array $properties,
         public bool $locked,
         public bool $enabled,
-        public bool $has_password,
-        public bool $update_password_required,
-        public bool $mfa_enabled,
-        public bool $can_create_orgs,
+        public bool $hasPassword,
+        public bool $updatePasswordRequired,
+        public bool $mfaEnabled,
+        public bool $canCreateOrgs,
         #[WithCast(CarbonFromTimestampCast::class)]
-        public \DateTime $created_at,
+        public \DateTime $createdAt,
         #[WithCast(CarbonFromTimestampCast::class)]
-        public \DateTime $last_active_at,
+        public \DateTime $lastActiveAt,
         public array $orgs = [],
     ) {}
 
@@ -37,22 +37,22 @@ class UserData extends Data
     public static function fromArray(array $data): self
     {
         return new self(
-            user_id: $data['user_id'],
+            userId: $data['userId'],
             email: $data['email'],
-            email_confirmed: $data['email_confirmed'],
-            first_name: $data['first_name'],
-            last_name: $data['last_name'],
+            emailConfirmed: $data['emailConfirmed'],
+            firstName: $data['firstName'] ?? null,
+            lastName: $data['lastName'] ?? null,
             username: $data['username'] ?? null,
-            picture_url: $data['picture_url'],
+            pictureUrl: $data['pictureUrl'],
             properties: $data['properties'] ?? [],
             locked: $data['locked'] ?? false,
             enabled: $data['enabled'] ?? true,
-            has_password: $data['has_password'] ?? false,
-            update_password_required: $data['update_password_required'] ?? false,
-            mfa_enabled: $data['mfa_enabled'] ?? false,
-            can_create_orgs: $data['can_create_orgs'] ?? false,
-            created_at: Carbon::createFromTimestamp($data['created_at']),
-            last_active_at: Carbon::createFromTimestamp($data['last_active_at']),
+            hasPassword: $data['hasPassword'] ?? false,
+            updatePasswordRequired: $data['updatePasswordRequired'] ?? false,
+            mfaEnabled: $data['mfaEnabled'] ?? false,
+            canCreateOrgs: $data['canCreateOrgs'] ?? false,
+            createdAt: Carbon::createFromTimestamp($data['createdAt']),
+            lastActiveAt: Carbon::createFromTimestamp($data['lastActiveAt']),
             orgs: $data['orgs'] ?? [],
         );
     }

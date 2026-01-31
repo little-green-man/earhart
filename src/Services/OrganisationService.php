@@ -2,24 +2,13 @@
 
 namespace LittleGreenMan\Earhart\Services;
 
-use Illuminate\Support\Facades\Http;
 use LittleGreenMan\Earhart\Exceptions\InvalidOrgException;
-use LittleGreenMan\Earhart\Exceptions\RateLimitException;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationData;
 use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
+use LittleGreenMan\Earhart\PropelAuth\UserData;
 
-class OrganisationService
+class OrganisationService extends BaseApiService
 {
-    private int $maxRetries = 3;
-
-    private int $initialRetryDelay = 1;
-
-    public function __construct(
-        protected string $apiKey,
-        protected string $authUrl,
-        protected CacheService $cache,
-    ) {}
-
     /**
      * Fetch organisation by ID.
      */
@@ -51,6 +40,14 @@ class OrganisationService
 
         $response = $this->makeRequest('GET', '/api/backend/v1/org/query', $params);
 
+        // Convert arrays to OrganisationData objects for consistency
+        // Note: 'orgs' array is protected from auto-conversion, so manually convert each org
+        $orgs = array_map(
+            fn ($org) => OrganisationData::fromArray($this->toCamelCase($org)),
+            $response['orgs'] ?? []
+        );
+        $response['items'] = $orgs;
+
         return PaginatedResult::from($response, fn (int $nextPage) => $this->queryOrganisations(
             $orderBy,
             $nextPage,
@@ -67,6 +64,13 @@ class OrganisationService
             'pageSize' => $pageSize,
             'includeOrgs' => false,
         ]);
+
+        // Convert arrays to UserData objects for consistency
+        $users = array_map(
+            fn ($user) => UserData::fromArray($user),
+            $response['users'] ?? []
+        );
+        $response['items'] = $users;
 
         return PaginatedResult::from($response, fn (int $nextPage) => $this->getOrganisationUsers($orgId, $pageSize));
     }
@@ -351,79 +355,5 @@ class OrganisationService
         }
 
         return OrganisationData::fromArray($response);
-    }
-
-    /**
-     * Make an HTTP request with retry logic.
-     *
-     * @param  array<string, mixed>  $data
-     * @return array<string, mixed>
-     */
-    protected function makeRequest(string $method, string $endpoint, array $data = []): array
-    {
-        return $this->executeWithRetry(fn () => $this->sendRequest($method, $endpoint, $data));
-    }
-
-    /**
-     * Send HTTP request to PropelAuth API.
-     *
-     * @param  array<string, mixed>  $data
-     * @return array<string, mixed>
-     */
-    protected function sendRequest(string $method, string $endpoint, array $data = []): array
-    {
-        $request = Http::withToken($this->apiKey)->withHeaders(['Content-Type' => 'application/json'])->timeout(30);
-
-        $response = match ($method) {
-            'GET' => $request->get($this->authUrl.$endpoint, $data),
-            'POST' => $request->post($this->authUrl.$endpoint, $data),
-            'PUT' => $request->put($this->authUrl.$endpoint, $data),
-            'DELETE' => $request->delete($this->authUrl.$endpoint, $data),
-            default => throw new \InvalidArgumentException("Unsupported method: {$method}"),
-        };
-
-        if ($response->status() === 429) {
-            throw RateLimitException::fromHeaders($response->header('Retry-After'));
-        }
-
-        // Allow 404 to pass through - let callers handle it
-        // But throw for other error responses
-        if ($response->failed() && $response->status() !== 404) {
-            throw new \Exception("PropelAuth API error: {$response->status()} - {$response->body()}");
-        }
-
-        $json = $response->json();
-        if (! is_array($json)) {
-            $json = [];
-        }
-
-        return $json + ['status' => $response->status()];
-    }
-
-    /**
-     * Execute request with automatic retry logic.
-     */
-    protected function executeWithRetry(\Closure $callback): mixed
-    {
-        $attempt = 0;
-        $lastException = null;
-
-        while ($attempt < $this->maxRetries) {
-            try {
-                return $callback();
-            } catch (RateLimitException $e) {
-                $lastException = $e;
-                $attempt++;
-
-                if ($attempt >= $this->maxRetries) {
-                    break;
-                }
-
-                $delay = $this->initialRetryDelay * (2 ** ($attempt - 1));
-                sleep($delay);
-            }
-        }
-
-        throw $lastException ?? new \Exception('Max retries exceeded');
     }
 }

@@ -17,22 +17,22 @@ describe('VerifyPropelAuthUser', function () {
     function mockUserData(): array
     {
         return [
-            'user_id' => 'user123',
+            'userId' => 'user123',
             'email' => 'test@example.com',
-            'email_confirmed' => true,
-            'first_name' => 'John',
-            'last_name' => 'Doe',
+            'emailConfirmed' => true,
+            'firstName' => 'John',
+            'lastName' => 'Doe',
             'username' => 'johndoe',
-            'picture_url' => 'https://example.com/pic.jpg',
+            'pictureUrl' => 'https://example.com/pic.jpg',
             'properties' => [],
             'locked' => false,
             'enabled' => true,
-            'has_password' => true,
-            'update_password_required' => false,
-            'mfa_enabled' => false,
-            'can_create_orgs' => true,
-            'created_at' => 1609459200,
-            'last_active_at' => 1609459200,
+            'hasPassword' => true,
+            'updatePasswordRequired' => false,
+            'mfaEnabled' => false,
+            'canCreateOrgs' => true,
+            'createdAt' => 1609459200,
+            'lastActiveAt' => 1609459200,
         ];
     }
 

@@ -28,16 +28,16 @@ class ServiceProvider extends BaseServiceProvider
         // Register CacheService
         $this->app->singleton(CacheService::class, function ($app) {
             return new CacheService(
-                enabled: config('services.propelauth.cache.enabled', false),
-                ttlMinutes: config('services.propelauth.cache.ttl_minutes', 60),
+                enabled: (bool) config('services.propelauth.cache.enabled', false),
+                ttlMinutes: (int) config('services.propelauth.cache.ttl_minutes', 60),
             );
         });
 
         // Register UserService
         $this->app->singleton(UserService::class, function ($app) {
             return new UserService(
-                apiKey: config('services.propelauth.api_key'),
-                authUrl: config('services.propelauth.auth_url'),
+                apiKey: (string) config('services.propelauth.api_key'),
+                authUrl: (string) config('services.propelauth.auth_url'),
                 cache: $app->make(CacheService::class),
             );
         });
@@ -45,8 +45,8 @@ class ServiceProvider extends BaseServiceProvider
         // Register OrganisationService
         $this->app->singleton(OrganisationService::class, function ($app) {
             return new OrganisationService(
-                apiKey: config('services.propelauth.api_key'),
-                authUrl: config('services.propelauth.auth_url'),
+                apiKey: (string) config('services.propelauth.api_key'),
+                authUrl: (string) config('services.propelauth.auth_url'),
                 cache: $app->make(CacheService::class),
             );
         });
@@ -54,14 +54,14 @@ class ServiceProvider extends BaseServiceProvider
         // Register main Earhart facade/service
         $this->app->singleton('earhart', function ($app) {
             return new Earhart(
-                clientId: config('services.propelauth.client_id'),
-                clientSecret: config('services.propelauth.client_secret'),
-                callbackUrl: config('services.propelauth.redirect_url'),
-                authUrl: config('services.propelauth.auth_url'),
-                svixSecret: config('services.propelauth.svix_secret'),
-                apiKey: config('services.propelauth.api_key'),
-                enableCache: config('services.propelauth.cache.enabled', false),
-                cacheTtlMinutes: config('services.propelauth.cache.ttl_minutes', 60),
+                clientId: (string) config('services.propelauth.client_id'),
+                clientSecret: (string) config('services.propelauth.client_secret'),
+                callbackUrl: (string) config('services.propelauth.redirect'),
+                authUrl: (string) config('services.propelauth.auth_url'),
+                svixSecret: (string) config('services.propelauth.svix_secret'),
+                apiKey: (string) config('services.propelauth.api_key'),
+                enableCache: (bool) config('services.propelauth.cache.enabled', false),
+                cacheTtlMinutes: (int) config('services.propelauth.cache.ttl_minutes', 60),
             );
         });
 

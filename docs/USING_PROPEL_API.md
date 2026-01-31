@@ -4,6 +4,31 @@ This guide shows you how to use PropelAuth's API from your Laravel application v
 
 > **PropelAuth API Reference**: [https://docs.propelauth.com/reference/api/getting-started](https://docs.propelauth.com/reference/api/getting-started)
 
+## Automatic Case Conversion
+
+Earhart automatically handles case conversion between PHP's camelCase conventions and PropelAuth's snake_case API:
+
+- **Method parameters**: Use camelCase (e.g., `firstName`, `emailConfirmed`) - automatically converted to snake_case for the API
+- **Response data**: API returns snake_case - automatically converted to camelCase in DTOs
+- **No manual conversion needed**: Just use standard PHP naming conventions throughout your application
+
+```php
+// You write (camelCase):
+$user = app('earhart')->createUser([
+    'email' => 'user@example.com',
+    'firstName' => 'John',
+    'lastName' => 'Doe',
+    'emailConfirmed' => true,
+]);
+
+// Earhart sends to API (snake_case):
+// { "email": "...", "first_name": "John", "last_name": "Doe", "email_confirmed": true }
+
+// Access properties (camelCase):
+echo $user->firstName;  // "John"
+echo $user->emailConfirmed;  // true
+```
+
 ## Table of Contents
 
 - [Getting Started](#getting-started)
@@ -58,17 +83,17 @@ try {
     $user = app('earhart')->getUser('user_id_here');
     
     echo $user->email;              // user@example.com
-    echo $user->first_name;         // John
-    echo $user->last_name;          // Doe
+    echo $user->firstName;          // John
+    echo $user->lastName;           // Doe
     echo $user->username;           // johndoe
-    echo $user->picture_url;        // https://...
-    echo $user->email_confirmed;    // true/false
+    echo $user->pictureUrl;         // https://...
+    echo $user->emailConfirmed;     // true/false
     echo $user->enabled;            // true/false
     echo $user->locked;             // true/false
-    echo $user->has_password;       // true/false
-    echo $user->mfa_enabled;        // true/false
-    echo $user->created_at;         // Carbon instance
-    echo $user->last_active_at;     // Carbon instance
+    echo $user->hasPassword;        // true/false
+    echo $user->mfaEnabled;         // true/false
+    echo $user->createdAt;          // Carbon instance
+    echo $user->lastActiveAt;       // Carbon instance
     
     // Access custom properties
     $properties = $user->properties;
@@ -92,7 +117,7 @@ try {
 ```php
 try {
     $user = app('earhart')->getUserByEmail('user@example.com');
-    echo "Found user: {$user->first_name} {$user->last_name}";
+    echo "Found user: {$user->firstName} {$user->lastName}";
 } catch (InvalidUserException $e) {
     echo "No user found with that email";
 }
@@ -105,7 +130,7 @@ try {
 ```php
 try {
     $user = app('earhart')->getUserByUsername('johndoe', includeOrgs: true);
-    echo "User ID: {$user->user_id}";
+    echo "User ID: {$user->userId}";
 } catch (InvalidUserException $e) {
     echo "No user found with that username";
 }
@@ -129,7 +154,7 @@ echo "Current page: {$result->currentPage}";
 
 foreach ($result->items as $userData) {
     $user = \LittleGreenMan\Earhart\PropelAuth\UserData::fromArray($userData);
-    echo "{$user->email} - {$user->first_name} {$user->last_name}\n";
+    echo "{$user->email} - {$user->firstName} {$user->lastName}\n";
 }
 
 // Fetch next page if available
@@ -403,8 +428,14 @@ $result = app('earhart')->organisations()->queryOrganisations(
     pageSize: 100
 );
 
-foreach ($result->items as $orgData) {
-    $org = \LittleGreenMan\Earhart\PropelAuth\OrganisationData::fromArray($orgData);
+// Items are already OrganisationData objects
+foreach ($result->items as $org) {
+    echo "{$org->displayName}\n";
+}
+
+// Or use the facade method for simpler access:
+$orgsData = app('earhart')->getOrganisations(pageSize: 100);
+foreach ($orgsData->orgs as $org) {
     echo "{$org->displayName}\n";
 }
 ```
@@ -414,18 +445,25 @@ foreach ($result->items as $orgData) {
 > **API Reference**: [Fetch Users in Org](https://docs.propelauth.com/reference/api/org#fetch-users-in-org)
 
 ```php
+// Using service method (returns PaginatedResult with metadata):
 $result = app('earhart')->organisations()->getOrganisationUsers(
     orgId: 'org_id_here',
     pageSize: 100
 );
 
 echo "Total users in org: {$result->totalItems}";
+echo "Has more results: " . ($result->hasMoreResults ? 'yes' : 'no');
 
-foreach ($result->items as $userData) {
-    $user = \LittleGreenMan\Earhart\PropelAuth\UserData::fromArray($userData);
-    echo "{$user->email} - {$user->first_name} {$user->last_name}\n";
+// Items are already UserData objects
+foreach ($result->items as $user) {
+    echo "{$user->email} - {$user->firstName} {$user->lastName}\n";
 }
 
+// Or use the facade method (returns simple array):
+$users = app('earhart')->getUsersInOrganisation('org_id_here');
+foreach ($users as $user) {
+    echo "{$user->email} - {$user->firstName} {$user->lastName}\n";
+}
 ```
 
 ### Creating & Updating Organisations
@@ -741,14 +779,14 @@ class InvalidateUserCacheListener
     public function handle(UserUpdated $event): void
     {
         // Automatically invalidate cache when user is updated
-        app('earhart')->invalidateUserCache($event->user_id);
+        app('earhart')->invalidateUserCache($event->userId);
         
         // Refresh user data
-        $user = app('earhart')->getUser($event->user_id, fresh: true);
+        $user = app('earhart')->getUser($event->userId, fresh: true);
         
         // Update your local database
-        \App\Models\User::where('propel_id', $event->user_id)->update([
-            'name' => "{$user->first_name} {$user->last_name}",
+        \App\Models\User::where('propel_id', $event->userId)->update([
+            'name' => "{$user->firstName} {$user->lastName}",
             'email' => $user->email,
         ]);
     }
@@ -867,8 +905,8 @@ do {
         $user = \LittleGreenMan\Earhart\PropelAuth\UserData::fromArray($userData);
         
         \App\Models\User::updateOrCreate(
-            ['propel_id' => $user->user_id],
-            ['email' => $user->email, 'name' => "{$user->first_name} {$user->last_name}"]
+            ['propel_id' => $user->userId],
+            ['email' => $user->email, 'name' => "{$user->firstName} {$user->lastName}"]
         );
     }
     
@@ -941,8 +979,8 @@ protected function schedule(Schedule $schedule)
             $user = \LittleGreenMan\Earhart\PropelAuth\UserData::fromArray($userData);
             
             \App\Models\User::updateOrCreate(
-                ['propel_id' => $user->user_id],
-                ['email' => $user->email, 'name' => "{$user->first_name} {$user->last_name}"]
+                ['propel_id' => $user->userId],
+                ['email' => $user->email, 'name' => "{$user->firstName} {$user->lastName}"]
             );
         }
     })->daily();

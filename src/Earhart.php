@@ -2,11 +2,9 @@
 
 namespace LittleGreenMan\Earhart;
 
-use Illuminate\Support\Facades\Http;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationData;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationsData;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
-use LittleGreenMan\Earhart\PropelAuth\UsersData;
 use LittleGreenMan\Earhart\Services\CacheService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 use LittleGreenMan\Earhart\Services\UserService;
@@ -254,6 +252,9 @@ class Earhart
 
     /**
      * Migrate user password from external source.
+     *
+     * @param  string  $userId  The user ID
+     * @param  string  $passwordHash  The password hash (must be pre-hashed using bcrypt, scrypt, or argon2)
      */
     public function migrateUserPassword(string $userId, string $passwordHash): bool
     {
@@ -269,9 +270,7 @@ class Earhart
      */
     public function getOrganisation(string $id): OrganisationData
     {
-        return OrganisationData::from(Http::withToken($this->apiKey)->get($this->authUrl
-        .'/api/backend/v1/org/'
-        .$id)->json());
+        return $this->organisations()->getOrganisation($id);
     }
 
     /**
@@ -279,26 +278,30 @@ class Earhart
      */
     public function getOrganisations(int $pageSize = 1000)
     {
-        return OrganisationsData::from(Http::withToken($this->apiKey)->get(
-            $this->authUrl.'/api/backend/v1/org/query',
-            [
-                'pageSize' => $pageSize,
-            ],
-        )->json());
+        $result = $this->organisations()->queryOrganisations(pageSize: $pageSize);
+
+        // Items are already OrganisationData objects from queryOrganisations()
+        // Convert PaginatedResult back to OrganisationsData for backward compatibility
+        return new OrganisationsData(
+            orgs: collect($result->items),
+            total_orgs: $result->totalItems,
+            current_page: $result->currentPage,
+            page_size: $result->pageSize,
+            has_more_results: $result->hasMoreResults,
+        );
     }
 
     /**
      * Fetch users in organisation.
+     *
+     * @return array<UserData>
      */
-    public function getUsersInOrganisation(string $organisationId)
+    public function getUsersInOrganisation(string $organisationId): array
     {
-        return UsersData::from(Http::withToken($this->apiKey)->get(
-            $this->authUrl.'/api/backend/v1/user/org/'.$organisationId,
-            [
-                'pageSize' => 1000,
-                'includeOrgs' => false,
-            ],
-        )->json());
+        $result = $this->organisations()->getOrganisationUsers($organisationId, pageSize: 100);
+
+        // Items are already UserData objects from getOrganisationUsers()
+        return $result->items;
     }
 
     // ============================================================

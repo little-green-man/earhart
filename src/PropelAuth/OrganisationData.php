@@ -33,7 +33,7 @@ class OrganisationData extends Data
     {
         return new self(
             orgId: $data['orgId'],
-            displayName: $data['displayName'],
+            displayName: $data['name'], // API returns 'name', we map to displayName
             urlSafeOrgSlug: $data['urlSafeOrgSlug'] ?? null,
             canSetupSaml: $data['canSetupSaml'] ?? null,
             isSamlConfigured: $data['isSamlConfigured'] ?? false,
