@@ -34,8 +34,11 @@ jobs:
             - name: Run Pint
               run: ./vendor/bin/pint --test
 
+            - name: Debug - List files
+              run: ls -la
+
             - name: Run Larastan
-              run: ./vendor/bin/phpstan analyse -cphpstan.neon
+              run: ./vendor/bin/phpstan analyse
 
     test:
         name: Test PHP ${{ matrix.php }} with Laravel ${{ matrix.laravel }}
