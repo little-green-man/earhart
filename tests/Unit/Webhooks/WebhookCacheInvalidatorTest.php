@@ -23,6 +23,7 @@ class WebhookCacheInvalidatorTest extends TestCase
 {
     private WebhookCacheInvalidator $invalidator;
 
+    /** @var CacheService&\Mockery\MockInterface */
     private CacheService $cacheService;
 
     protected function setUp(): void

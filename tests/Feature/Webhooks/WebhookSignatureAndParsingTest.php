@@ -45,7 +45,6 @@ class WebhookSignatureAndParsingTest extends TestCase
 
         $verifiedPayload = $verifier->verify($payload, $headers);
 
-        $this->assertIsArray($verifiedPayload);
         $this->assertEquals('user.created', $verifiedPayload['event_type']);
         $this->assertEquals('user_e2e_001', $verifiedPayload['user_id']);
     }
@@ -136,7 +135,6 @@ class WebhookSignatureAndParsingTest extends TestCase
 
         $verifiedPayload = $verifier->verify($payload, $uppercaseHeaders);
 
-        $this->assertIsArray($verifiedPayload);
         $this->assertEquals('user.created', $verifiedPayload['event_type']);
     }
 

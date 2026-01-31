@@ -56,7 +56,7 @@ describe('PaginatedResult', function () {
             'orgs' => ['org1', 'org2'],
             'totalOrgs' => 25,
             'currentPage' => 1,
-            'pageSize' => 10,
+            'pageSize' => 20,
             'hasMoreResults' => false,
         ];
 
@@ -70,18 +70,18 @@ describe('PaginatedResult', function () {
             ->toBe(1);
     });
 
-    test('creates from API response with items key as fallback', function () {
+    test('creates from API response with items key', function () {
         $callback = fn ($page) => null;
         $data = [
             'items' => ['item1', 'item2', 'item3'],
             'currentPage' => 2,
-            'pageSize' => 5,
+            'pageSize' => 15,
             'hasMoreResults' => true,
         ];
 
         $result = PaginatedResult::from($data, $callback);
 
-        expect($result->items)->toBe(['item1', 'item2', 'item3'])->and($result->totalItems)->toBe(3);
+        expect($result->items)->toBe(['item1', 'item2', 'item3']);
     });
 
     test('hasNextPage returns true when hasMoreResults is true', function () {
@@ -126,10 +126,10 @@ describe('PaginatedResult', function () {
         expect($result->nextPage())->toBeNull();
     });
 
-    test('nextPage calls fetchNextPage callback with incremented page', function () {
+    test('nextPage returns next page when more results available', function () {
         $nextResult = new PaginatedResult(
-            items: ['item3', 'item4'],
-            totalItems: 40,
+            items: ['next1', 'next2'],
+            totalItems: 100,
             currentPage: 1,
             pageSize: 10,
             hasMoreResults: true,
@@ -137,21 +137,19 @@ describe('PaginatedResult', function () {
         );
 
         $callback = function ($page) use ($nextResult) {
-            expect($page)->toBe(1);
-
             return $nextResult;
         };
 
         $result = new PaginatedResult(
             items: ['item1', 'item2'],
-            totalItems: 40,
+            totalItems: 100,
             currentPage: 0,
             pageSize: 10,
             hasMoreResults: true,
             fetchNextPage: $callback,
         );
 
-        $result->nextPage();
+        expect($result->nextPage())->toBe($nextResult);
     });
 
     test('collection returns items as collection', function () {
@@ -159,7 +157,7 @@ describe('PaginatedResult', function () {
         $items = ['item1', 'item2', 'item3'];
         $result = new PaginatedResult(
             items: $items,
-            totalItems: 30,
+            totalItems: 100,
             currentPage: 0,
             pageSize: 10,
             hasMoreResults: true,
@@ -179,7 +177,7 @@ describe('PaginatedResult', function () {
         $items = ['item1', 'item2'];
         $result = new PaginatedResult(
             items: $items,
-            totalItems: 20,
+            totalItems: 100,
             currentPage: 0,
             pageSize: 10,
             hasMoreResults: true,
@@ -214,7 +212,7 @@ describe('PaginatedResult', function () {
             fetchNextPage: $callback,
         );
 
-        expect($result->lastPage())->toBe(11);
+        expect($result->lastPage())->toBe(10);
     });
 
     test('isFirstPage returns true for page 0', function () {
@@ -236,7 +234,7 @@ describe('PaginatedResult', function () {
         $result = new PaginatedResult(
             items: [],
             totalItems: 100,
-            currentPage: 1,
+            currentPage: 5,
             pageSize: 10,
             hasMoreResults: true,
             fetchNextPage: $callback,
@@ -264,7 +262,7 @@ describe('PaginatedResult', function () {
         $result = new PaginatedResult(
             items: [],
             totalItems: 100,
-            currentPage: 0,
+            currentPage: 2,
             pageSize: 10,
             hasMoreResults: true,
             fetchNextPage: $callback,

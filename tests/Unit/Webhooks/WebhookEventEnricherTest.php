@@ -17,8 +17,10 @@ class WebhookEventEnricherTest extends TestCase
 {
     private WebhookEventEnricher $enricher;
 
+    /** @var UserService&\Mockery\MockInterface */
     private UserService $userService;
 
+    /** @var OrganisationService&\Mockery\MockInterface */
     private OrganisationService $orgService;
 
     protected function setUp(): void

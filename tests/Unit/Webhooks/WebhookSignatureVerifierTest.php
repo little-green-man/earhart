@@ -249,7 +249,7 @@ describe('WebhookSignatureVerifier', function () {
 
             $masked = $verifier->getMaskedSecret();
 
-            expect($masked)->toStartWith('whsec_12')->not->toContain('34')->toContain('*');
+            expect($masked)->toStartWith('whsec_12')->and($masked)->not->toContain('34')->and($masked)->toContain('*');
         });
 
         it('handles 8-character secrets correctly', function () {

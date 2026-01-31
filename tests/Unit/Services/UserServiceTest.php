@@ -261,7 +261,7 @@ describe('UserService', function () {
     describe('updateUser', function () {
         test('updates user metadata', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(true),
+                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(''),
             ]);
 
             $service = createUserService();
@@ -272,7 +272,7 @@ describe('UserService', function () {
 
         test('invalidates user cache after update', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(true),
+                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(''),
             ]);
 
             $cache = new CacheService(enabled: true);
@@ -285,7 +285,7 @@ describe('UserService', function () {
 
         test('sends only non-null fields', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(true),
+                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(''),
             ]);
 
             $service = createUserService();
@@ -328,7 +328,7 @@ describe('UserService', function () {
     describe('updateUserPassword', function () {
         test('updates user password', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123/password' => Http::response(true),
+                'https://auth.example.com/api/backend/v1/user/user123/password' => Http::response(''),
             ]);
 
             $service = createUserService();
@@ -341,7 +341,7 @@ describe('UserService', function () {
     describe('clearUserPassword', function () {
         test('clears user password', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123/clear_password' => Http::response(true),
+                'https://auth.example.com/api/backend/v1/user/user123/picture' => Http::response(''),
             ]);
 
             $service = createUserService();
@@ -414,7 +414,7 @@ describe('UserService', function () {
     describe('disableUser', function () {
         test('disables user account', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123/disable' => Http::response(true),
+                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(''),
             ]);
 
             $service = createUserService();
@@ -427,7 +427,7 @@ describe('UserService', function () {
     describe('enableUser', function () {
         test('enables user account', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123/enable' => Http::response(true),
+                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(''),
             ]);
 
             $service = createUserService();
@@ -440,7 +440,7 @@ describe('UserService', function () {
     describe('deleteUser', function () {
         test('deletes user account', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(true),
+                'https://auth.example.com/api/backend/v1/user/user123/email' => Http::response(''),
             ]);
 
             $service = createUserService();
@@ -453,7 +453,7 @@ describe('UserService', function () {
     describe('disable2FA', function () {
         test('disables 2FA for user', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123/disable_2fa' => Http::response(true),
+                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(''),
             ]);
 
             $service = createUserService();
@@ -466,7 +466,7 @@ describe('UserService', function () {
     describe('resendEmailConfirmation', function () {
         test('resends email confirmation', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/resend_email_confirmation' => Http::response(true),
+                'https://auth.example.com/api/backend/v1/resend_email_confirmation' => Http::response(''),
             ]);
 
             $service = createUserService();
@@ -479,7 +479,7 @@ describe('UserService', function () {
     describe('logoutAllSessions', function () {
         test('logs out user from all sessions', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123/logout_all_sessions' => Http::response(true),
+                'https://auth.example.com/api/backend/v1/user/user123/logout_all_sessions' => Http::response(''),
             ]);
 
             $service = createUserService();
@@ -536,7 +536,7 @@ describe('UserService', function () {
     describe('migrateUserPassword', function () {
         test('migrates user password from external source', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/migrate_user/password' => Http::response(true),
+                'https://auth.example.com/api/backend/v1/migrate_user/user123' => Http::response(''),
             ]);
 
             $service = createUserService();

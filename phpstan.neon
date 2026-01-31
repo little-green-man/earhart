@@ -5,3 +5,39 @@ parameters:
     level: 5
     paths:
         - src
+        - tests
+
+    ignoreErrors:
+        # Pest architecture testing DSL
+        -
+            message: '#Call to an undefined method Pest\\PendingCalls\\TestCall::expect\(\)#'
+            path: tests/ArchTest.php
+
+        # Mockery mock method calls in Pest tests and PHPUnit tests
+        -
+            message: '#Call to an undefined method Mockery\\ExpectationInterface\|Mockery\\HigherOrderMessage::(with|andReturn|andThrow|times|zeroOrMoreTimes)\(\)#'
+            paths:
+                - tests/Unit/Middleware/VerifyPropelAuthUserTest.php
+                - tests/Unit/Webhooks/WebhookCacheInvalidatorTest.php
+                - tests/Unit/Query/QueryBuilderTest.php
+                - tests/Unit/Webhooks/WebhookEventEnricherTest.php
+
+        # Test closure type hints for PaginatedResult - these are dummy callbacks
+        -
+            message: '#Parameter (\$fetchNextPage|\#2 \$fetchNext) .* expects Closure\(int\): LittleGreenMan\\Earhart\\PropelAuth\\PaginatedResult, Closure\((mixed|)\): null given#'
+            paths:
+                - tests/Unit/PropelAuth/PaginatedResultTest.php
+                - tests/Unit/Query/QueryBuilderTest.php
+
+        # Mockery mock property assignments
+        -
+            message: '#Property .* does not accept Mockery\\MockInterface#'
+            paths:
+                - tests/Unit/Query/QueryBuilderTest.php
+                - tests/Unit/Webhooks/WebhookCacheInvalidatorTest.php
+                - tests/Unit/Webhooks/WebhookEventEnricherTest.php
+
+        # Mockery mock object property access in tests
+        -
+            message: '#Access to an undefined property Mockery\\MockInterface::\$(user_id|email|orgId)#'
+            path: tests/Unit/Webhooks/WebhookEventEnricherTest.php

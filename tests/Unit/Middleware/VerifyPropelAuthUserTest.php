@@ -9,6 +9,7 @@ use LittleGreenMan\Earhart\Middleware\VerifyPropelAuthUser;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
 use LittleGreenMan\Earhart\Services\UserService;
 use LittleGreenMan\Earhart\Tests\TestCase;
+use Mockery\MockInterface;
 
 uses(TestCase::class);
 
@@ -35,7 +36,10 @@ describe('VerifyPropelAuthUser', function () {
         ];
     }
 
-    function createUserMiddleware(?UserService $userService = null): VerifyPropelAuthUser
+    /**
+     * @param  UserService|MockInterface|null  $userService
+     */
+    function createUserMiddleware($userService = null): VerifyPropelAuthUser
     {
         if (! $userService) {
             $userService = mock(UserService::class);
@@ -46,11 +50,9 @@ describe('VerifyPropelAuthUser', function () {
 
     test('allows requests with valid bearer token', function () {
         $userData = mockUserData();
-        $userService = mock(UserService::class)
-            ->shouldReceive('validateToken')
-            ->with('valid-token')
-            ->andReturn(UserData::fromArray($userData))
-            ->getMock();
+        /** @var UserService&MockInterface $userService */
+        $userService = mock(UserService::class);
+        $userService->shouldReceive('validateToken')->with('valid-token')->andReturn(UserData::fromArray($userData));
 
         $middleware = createUserMiddleware($userService);
         $request = Request::create(
@@ -72,11 +74,9 @@ describe('VerifyPropelAuthUser', function () {
 
     test('allows requests with session cookie', function () {
         $userData = mockUserData();
-        $userService = mock(UserService::class)
-            ->shouldReceive('validateToken')
-            ->with('session-token')
-            ->andReturn(UserData::fromArray($userData))
-            ->getMock();
+        /** @var UserService&MockInterface $userService */
+        $userService = mock(UserService::class);
+        $userService->shouldReceive('validateToken')->with('session-token')->andReturn(UserData::fromArray($userData));
 
         $middleware = createUserMiddleware($userService);
         $request = Request::create('/', 'GET', [], ['propelauth_session' => 'session-token']);
@@ -99,11 +99,12 @@ describe('VerifyPropelAuthUser', function () {
     });
 
     test('rejects requests with invalid token', function () {
-        $userService = mock(UserService::class)
+        /** @var UserService&MockInterface $userService */
+        $userService = mock(UserService::class);
+        $userService
             ->shouldReceive('validateToken')
             ->with('invalid-token')
-            ->andThrow(InvalidUserException::notFound('user'))
-            ->getMock();
+            ->andThrow(InvalidUserException::notFound('user'));
 
         $middleware = createUserMiddleware($userService);
         $request = Request::create(
@@ -126,11 +127,9 @@ describe('VerifyPropelAuthUser', function () {
 
     test('rejects requests with disabled user', function () {
         $userData = array_merge(mockUserData(), ['enabled' => false]);
-        $userService = mock(UserService::class)
-            ->shouldReceive('validateToken')
-            ->with('valid-token')
-            ->andReturn(UserData::fromArray($userData))
-            ->getMock();
+        /** @var UserService&MockInterface $userService */
+        $userService = mock(UserService::class);
+        $userService->shouldReceive('validateToken')->with('valid-token')->andReturn(UserData::fromArray($userData));
 
         $middleware = createUserMiddleware($userService);
         $request = Request::create(
@@ -153,10 +152,9 @@ describe('VerifyPropelAuthUser', function () {
 
     test('injects user into request', function () {
         $userData = mockUserData();
-        $userService = mock(UserService::class)
-            ->shouldReceive('validateToken')
-            ->andReturn(UserData::fromArray($userData))
-            ->getMock();
+        /** @var UserService&MockInterface $userService */
+        $userService = mock(UserService::class);
+        $userService->shouldReceive('validateToken')->andReturn(UserData::fromArray($userData));
 
         $middleware = createUserMiddleware($userService);
         $request = Request::create(
@@ -183,11 +181,9 @@ describe('VerifyPropelAuthUser', function () {
 
     test('extracts token from query parameter', function () {
         $userData = mockUserData();
-        $userService = mock(UserService::class)
-            ->shouldReceive('validateToken')
-            ->with('query-token')
-            ->andReturn(UserData::fromArray($userData))
-            ->getMock();
+        /** @var UserService&MockInterface $userService */
+        $userService = mock(UserService::class);
+        $userService->shouldReceive('validateToken')->with('query-token')->andReturn(UserData::fromArray($userData));
 
         $middleware = createUserMiddleware($userService);
         $request = Request::create('/', 'GET', ['token' => 'query-token']);
@@ -199,11 +195,9 @@ describe('VerifyPropelAuthUser', function () {
 
     test('prioritizes bearer token over cookie', function () {
         $userData = mockUserData();
-        $userService = mock(UserService::class)
-            ->shouldReceive('validateToken')
-            ->with('bearer-token')
-            ->andReturn(UserData::fromArray($userData))
-            ->getMock();
+        /** @var UserService&MockInterface $userService */
+        $userService = mock(UserService::class);
+        $userService->shouldReceive('validateToken')->with('bearer-token')->andReturn(UserData::fromArray($userData));
 
         $middleware = createUserMiddleware($userService);
         $request = Request::create(
@@ -223,10 +217,9 @@ describe('VerifyPropelAuthUser', function () {
     });
 
     test('handles api exceptions gracefully', function () {
-        $userService = mock(UserService::class)
-            ->shouldReceive('validateToken')
-            ->andThrow(new \Exception('API Error'))
-            ->getMock();
+        /** @var UserService&MockInterface $userService */
+        $userService = mock(UserService::class);
+        $userService->shouldReceive('validateToken')->andThrow(new \Exception('API Error'));
 
         $middleware = createUserMiddleware($userService);
         $request = Request::create(

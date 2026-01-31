@@ -11,8 +11,10 @@ use Mockery;
 
 class QueryBuilderTest extends TestCase
 {
+    /** @var UserService&\Mockery\MockInterface */
     private UserService $userService;
 
+    /** @var OrganisationService&\Mockery\MockInterface */
     private OrganisationService $orgService;
 
     protected function setUp(): void
@@ -138,7 +140,7 @@ class QueryBuilderTest extends TestCase
                 'pageSize' => 10,
                 'hasMoreResults' => false,
             ],
-            fn () => $paginatedResult,
+            fn () => null,
         );
 
         $this->userService
@@ -168,7 +170,7 @@ class QueryBuilderTest extends TestCase
                 'pageSize' => 10,
                 'hasMoreResults' => false,
             ],
-            fn () => $paginatedResult,
+            fn () => null,
         );
 
         $this->orgService
@@ -192,7 +194,7 @@ class QueryBuilderTest extends TestCase
         $item = ['user_id' => 'u1', 'email' => 'first@example.com'];
         $paginatedResult = PaginatedResult::from(
             ['users' => [$item], 'totalUsers' => 100, 'currentPage' => 0, 'pageSize' => 1, 'hasMoreResults' => true],
-            fn () => $paginatedResult,
+            fn () => null,
         );
 
         $this->userService
@@ -214,7 +216,7 @@ class QueryBuilderTest extends TestCase
     {
         $paginatedResult = PaginatedResult::from(
             ['users' => [], 'totalUsers' => 0, 'currentPage' => 0, 'pageSize' => 1, 'hasMoreResults' => false],
-            fn () => $paginatedResult,
+            fn () => null,
         );
 
         $this->userService
@@ -236,13 +238,13 @@ class QueryBuilderTest extends TestCase
     {
         $paginatedResult = PaginatedResult::from(
             [
-                'users' => [['user_id' => 'u1']],
+                'users' => [['user_id' => 'u1', 'email' => 'last@example.com']],
                 'totalUsers' => 1,
                 'currentPage' => 0,
                 'pageSize' => 1,
                 'hasMoreResults' => false,
             ],
-            fn () => $paginatedResult,
+            fn () => null,
         );
 
         $this->userService
@@ -263,7 +265,7 @@ class QueryBuilderTest extends TestCase
     {
         $paginatedResult = PaginatedResult::from(
             ['users' => [], 'totalUsers' => 0, 'currentPage' => 0, 'pageSize' => 1, 'hasMoreResults' => false],
-            fn () => $paginatedResult,
+            fn () => null,
         );
 
         $this->userService
@@ -284,7 +286,7 @@ class QueryBuilderTest extends TestCase
     {
         $paginatedResult = PaginatedResult::from(
             ['users' => [], 'totalUsers' => 42, 'currentPage' => 0, 'pageSize' => 10, 'hasMoreResults' => false],
-            fn () => $paginatedResult,
+            fn () => null,
         );
 
         $this->userService
@@ -384,13 +386,13 @@ class QueryBuilderTest extends TestCase
     {
         $paginatedResult = PaginatedResult::from(
             [
-                'users' => [['user_id' => 'u1']],
+                'users' => [['user_id' => 'u1', 'email' => 'user@example.com']],
                 'totalUsers' => 1,
-                'currentPage' => 3,
+                'currentPage' => 0,
                 'pageSize' => 20,
                 'hasMoreResults' => false,
             ],
-            fn () => $paginatedResult,
+            fn () => null,
         );
 
         $this->userService
@@ -429,24 +431,24 @@ class QueryBuilderTest extends TestCase
     {
         $result1 = PaginatedResult::from(
             [
-                'users' => [['user_id' => 'u1']],
-                'totalUsers' => 1,
+                'users' => [['user_id' => 'u1', 'email' => 'user1@example.com']],
+                'totalUsers' => 2,
                 'currentPage' => 0,
                 'pageSize' => 10,
                 'hasMoreResults' => false,
             ],
-            fn () => $result1,
+            fn () => null,
         );
 
         $result2 = PaginatedResult::from(
             [
-                'users' => [['user_id' => 'u2']],
-                'totalUsers' => 1,
+                'users' => [['user_id' => 'u2', 'email' => 'user2@example.com']],
+                'totalUsers' => 2,
                 'currentPage' => 1,
                 'pageSize' => 10,
                 'hasMoreResults' => false,
             ],
-            fn () => $result2,
+            fn () => null,
         );
 
         $this->userService
@@ -476,7 +478,6 @@ class QueryBuilderTest extends TestCase
 
         $params = $builder->getParams();
 
-        $this->assertIsArray($params);
         $this->assertArrayHasKey('type', $params);
         $this->assertArrayHasKey('search', $params);
         $this->assertArrayHasKey('orderBy', $params);
@@ -491,7 +492,7 @@ class QueryBuilderTest extends TestCase
     {
         $paginatedResult = PaginatedResult::from(
             ['orgs' => [], 'totalOrgs' => 0, 'currentPage' => 0, 'pageSize' => 10, 'hasMoreResults' => false],
-            fn () => $paginatedResult,
+            fn () => null,
         );
 
         $this->orgService
@@ -511,7 +512,7 @@ class QueryBuilderTest extends TestCase
     {
         $paginatedResult = PaginatedResult::from(
             ['users' => [], 'totalUsers' => 0, 'currentPage' => 0, 'pageSize' => 10, 'hasMoreResults' => false],
-            fn () => $paginatedResult,
+            fn () => null,
         );
 
         $this->userService
@@ -531,7 +532,7 @@ class QueryBuilderTest extends TestCase
     {
         $paginatedResult = PaginatedResult::from(
             ['users' => [1, 2, 3], 'totalUsers' => 0, 'currentPage' => 0, 'pageSize' => 10, 'hasMoreResults' => false],
-            fn () => $paginatedResult,
+            fn () => null,
         );
 
         $this->userService

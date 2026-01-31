@@ -322,7 +322,6 @@ class WebhookEventParserTest extends TestCase
     {
         $supported = $this->parser->getSupportedEventTypes();
 
-        $this->assertIsArray($supported);
         $this->assertCount(12, $supported);
         $this->assertContains('user.created', $supported);
         $this->assertContains('org.deleted', $supported);

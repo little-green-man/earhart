@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.5/phpunit.xsd"
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.5/phpunit.xsd"
          backupGlobals="false"
          backupStaticProperties="false"
          bootstrap="vendor/autoload.php"
-         cacheDirectory=".phpunit.cache"
          colors="true"
          displayDetailsOnTestsThatTriggerWarnings="true"
          processIsolation="false"
@@ -28,8 +28,8 @@
     </source>
     <coverage>
         <report>
-            <clover outputFile=".phpunit.cache/clover.xml"/>
-            <text outputFile=".phpunit.cache/coverage.txt" showUncoveredFiles="true"/>
+            <clover outputFile="build/clover.xml"/>
+            <text outputFile="build/coverage.txt" showUncoveredFiles="true"/>
         </report>
     </coverage>
     <logging>
