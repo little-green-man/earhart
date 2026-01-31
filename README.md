@@ -47,22 +47,35 @@ PROPELAUTH_CACHE_TTL=60
 
 ### 4. Configure the package:
 
-After publishing the config file (optional but recommended), Earhart automatically merges environment variables into the `config/earhart.php` configuration.
+After publishing the config file (optional but recommended), Earhart automatically merges environment variables into the `config/earhart.php` configuration. These are Earhart-specific variables.
+
+To remain compatible with Socialite, some configuration keys must be set in the `config/services.php` file, as shown below:
+
+```php
+'propelauth' => [
+    'client_id' => env('PROPELAUTH_CLIENT_ID'),
+    'client_secret' => env('PROPELAUTH_CLIENT_SECRET'),
+    'redirect' => env('PROPELAUTH_CALLBACK_URL'),
+    'auth_url' => env('PROPELAUTH_AUTH_URL'),
+    'svix_secret' => env('PROPELAUTH_SVIX_SECRET'),
+    'api_key' => env('PROPELAUTH_API_KEY'),
+],
+```
 
 **Environment Variable Mapping:**
 
 | Environment Variable | Config Key | Purpose |
 |---|---|---|
-| `PROPELAUTH_CLIENT_ID` | `earhart.client_id` | OAuth2 Client ID |
-| `PROPELAUTH_CLIENT_SECRET` | `earhart.client_secret` | OAuth2 Client Secret |
-| `PROPELAUTH_AUTH_URL` | `earhart.auth_url` | PropelAuth Auth URL (e.g., `https://your-org.propelauthtest.com`) |
-| `PROPELAUTH_CALLBACK_URL` | `earhart.redirect_url` | OAuth2 Callback URL |
-| `PROPELAUTH_API_KEY` | `earhart.api_key` | PropelAuth API Key for backend requests |
-| `PROPELAUTH_SVIX_SECRET` | `earhart.svix_secret` | Svix Webhook Signing Secret |
+| `PROPELAUTH_CLIENT_ID` | `services.propelauth.client_id` | OAuth2 Client ID |
+| `PROPELAUTH_CLIENT_SECRET` | `services.propelauth.client_secret` | OAuth2 Client Secret |
+| `PROPELAUTH_AUTH_URL` | `services.propelauth.auth_url` | PropelAuth Auth URL (e.g., `https://your-org.propelauthtest.com`) |
+| `PROPELAUTH_CALLBACK_URL` | `services.propelauth.redirect_url` | OAuth2 Callback URL |
+| `PROPELAUTH_API_KEY` | `services.propelauth.api_key` | PropelAuth API Key for backend requests |
+| `PROPELAUTH_SVIX_SECRET` | `services.propelauth.svix_secret` | Svix Webhook Signing Secret |
 | `PROPELAUTH_CACHE_ENABLED` | `earhart.cache.enabled` | Enable caching (boolean) |
 | `PROPELAUTH_CACHE_TTL` | `earhart.cache.ttl_minutes` | Cache TTL in minutes (default: 60) |
 
-**Publishing the Config File (Optional):**
+**Publishing the Earhart Config File (Optional):**
 
 To customize configuration, publish the config file:
 
@@ -85,7 +98,8 @@ This creates `config/earhart.php` where you can customize default values.
 ### 6. Add the webhook route to your web.php routes file:
 
 ```php
-Route::post('/auth/webhooks', \LittleGreenMan\Earhart\Controllers\AuthWebhookController::class)
+Route::post('/auth/webhooks', AuthWebhookController::class)
+    ->middleware(LittleGreenMan\Earhart\Middleware\VerifySvixWebhook::class)
     ->withoutMiddleware('web')
     ->name('auth.webhook');
 ```
@@ -174,19 +188,13 @@ And optionally the following, which redirect to the relevant sections in PropelA
 <a href="{{ route('auth.org.settings') }}">Organisation Settings</a>
 ```
 
+You can alternatively implement these features in your own application via integrations that Earhart provides.
+
 ## Refreshing User Tokens
 
 PropelAuth access tokens expire after 30 minutes. To keep user tokens fresh and prevent authentication failures, you should set up a scheduled job to refresh them automatically.
 
-**See [REFRESHING_USER_TOKENS.md](REFRESHING_USER_TOKENS.md) for a complete, production-ready example job and setup instructions.**
-
-The guide includes:
-- A ready-to-use `RefreshUserTokenJob` that you can customize for your implementation
-- Instructions for adding the job to your Laravel scheduler
-- Examples for different token storage approaches
-- Error handling and monitoring tips
-- Security best practices
-- Troubleshooting guide
+See [docs/REFRESHING_USER_TOKENS.md](docs/REFRESHING_USER_TOKENS.md) for a complete, production-ready example job and setup instructions.
 
 ## Registered Routes
 
@@ -203,7 +211,7 @@ The following routes are registered automatically:
 
 Set up listeners in your app for the following events:
 
-#### Organization Events
+### Organization Events
 
 * `LittleGreenMan\Earhart\Events\PropelAuth\OrgCreated` - Organization created
 * `LittleGreenMan\Earhart\Events\PropelAuth\OrgDeleted` - Organization deleted
@@ -218,7 +226,7 @@ Set up listeners in your app for the following events:
 * `LittleGreenMan\Earhart\Events\PropelAuth\OrgScimKeyCreated` - SCIM key created
 * `LittleGreenMan\Earhart\Events\PropelAuth\OrgScimKeyRevoked` - SCIM key revoked
 
-#### User Events
+### User Events
 
 * `LittleGreenMan\Earhart\Events\PropelAuth\UserCreated` - User created
 * `LittleGreenMan\Earhart\Events\PropelAuth\UserUpdated` - User profile updated
@@ -258,130 +266,6 @@ class PropelAuthOrgCreatedListener
 }
 ```
 
-## Webhook Signature Verification (v1.4+)
-
-Starting with v1.4, Earhart includes secure webhook signature verification using Svix.
-
-### Basic Setup
-
-Verify webhook signatures to ensure webhooks come from PropelAuth and haven't been tampered with:
-
-```php
-use LittleGreenMan\Earhart\Webhooks\WebhookSignatureVerifier;
-use LittleGreenMan\Earhart\Webhooks\WebhookEventParser;
-use Illuminate\Http\Request;
-
-Route::post('/auth/webhooks', function(Request $request) {
-    $verifier = new WebhookSignatureVerifier(
-        config('services.propelauth.svix_secret')
-    );
-
-    try {
-        // Verify the webhook signature
-        $payload = $verifier->verify(
-            $request->getContent(),
-            $request->headers->all()
-        );
-
-        // Parse and dispatch the event
-        $parser = new WebhookEventParser();
-        $event = $parser->parse($payload);
-
-        if ($event) {
-            event($event);
-        }
-
-        return response()->json(['status' => 'success']);
-    } catch (\Svix\Exception\WebhookVerificationException $e) {
-        \Log::warning('Webhook verification failed', ['error' => $e->getMessage()]);
-        return response()->json(['error' => 'Unauthorized'], 401);
-    }
-})->withoutMiddleware('web');
-```
-
-### Timestamp Validation
-
-Prevent replay attacks by validating webhook timestamps:
-
-```php
-$verifier = new WebhookSignatureVerifier($signingSecret);
-
-// Check if timestamp is within 5-minute tolerance (default)
-if (!$verifier->isTimestampValid($timestamp)) {
-    abort(400, 'Webhook timestamp too old');
-}
-
-// Use custom tolerance (e.g., 10 minutes)
-if (!$verifier->isTimestampValid($timestamp, 600)) {
-    abort(400, 'Webhook timestamp too old');
-}
-```
-
-### Configuration
-
-Use `WebhookConfig` for fine-grained control over webhook behavior:
-
-```php
-use LittleGreenMan\Earhart\Webhooks\WebhookConfig;
-
-$config = WebhookConfig::default()
-    ->setVerifySignatures(true)
-    ->withSigningSecret(config('services.propelauth.svix_secret'))
-    ->setTimestampTolerance(600)  // 10 minutes
-    ->setInvalidateUserListCache(true)
-    ->removeUserCacheInvalidationEvent('user.locked');
-```
-
-### Configuration from Array
-
-Load configuration from your Laravel config file:
-
-```php
-$config = WebhookConfig::fromArray([
-    'verify_signatures' => true,
-    'signing_secret' => env('PROPELAUTH_WEBHOOK_SECRET'),
-    'timestamp_tolerance_seconds' => 600,
-    'invalidate_user_list_cache' => false,
-]);
-```
-
-### Security Best Practices
-
-1. **Always verify signatures in production**
-   ```php
-   if (config('app.env') === 'production') {
-       $payload = $verifier->verify($requestBody, $headers);
-   }
-   ```
-
-2. **Use environment variables for secrets**
-   ```php
-   $secret = config('services.propelauth.svix_secret');
-   ```
-
-3. **Validate timestamps to prevent replay attacks**
-   ```php
-   if (!$verifier->isTimestampValid($timestamp)) {
-       abort(400);
-   }
-   ```
-
-4. **Handle errors gracefully**
-   ```php
-   try {
-       $payload = $verifier->verify($requestBody, $headers);
-   } catch (\Svix\Exception\WebhookVerificationException $e) {
-       \Log::error('Webhook verification failed', ['error' => $e->getMessage()]);
-       return response()->json(['error' => 'Unauthorized'], 401);
-   }
-   ```
-
-5. **Don't log sensitive data**
-   ```php
-   $masked = $verifier->getMaskedSecret();  // "whsec_lo**********************"
-   \Log::info('Webhook processed', ['secret' => $masked]);
-   ```
-
 ## PropelAuth API Usage
 
 Within your app, you can use the following code to interrogate the PropelAuth API, for example in response to an event:
@@ -392,7 +276,15 @@ $org = app('earhart')->getOrganisation('org_uuid');
 $users = app('earhart')->getUsersInOrganisation('org_uuid');
 ```
 
-## Testing
+See [USING_PROPEL_API](docs/USING_PROPEL_API.md) for a full reference.
+
+## Webhook Signature Verification (Optional)
+
+If you use the middleware in your webhook route, as shown above, your app will work fine and securely.
+
+Starting with v1.4, Earhart includes more advanced webhook signature verification. If you need that level of control, check out [ADVANCED_WEBHOOK_VERIFICATION.md](docs/ADVANCED_WEBHOOK_VERIFICATION.md).
+
+## Package Testing
 
 Run the test suite:
 
@@ -414,13 +306,10 @@ Please see [CHANGELOG.md](CHANGELOG.md) for more information on what has changed
 
 Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
-## Security Vulnerabilities
-
-Please review [our security policy](../../security/policy) on how to report security vulnerabilities.
-
 ## Credits
 
 - [Elliot](https://github.com/kurucu)
+- [Yannick](https://github.com/ylynfatt)
 - [All Contributors](../../contributors)
 
 ## License

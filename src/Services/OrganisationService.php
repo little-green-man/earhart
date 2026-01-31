@@ -128,12 +128,12 @@ class OrganisationService
     /**
      * Add user to organisation.
      */
-    public function addUserToOrganisation(string $orgId, string $email, ?string $role = null): bool
+    public function addUserToOrganisation(string $orgId, string $userId, ?string $role = null): bool
     {
         $payload = array_filter(
             [
                 'orgId' => $orgId,
-                'userEmail' => $email,
+                'userId' => $userId,
                 'role' => $role,
             ],
             fn ($v) => $v !== null,
@@ -236,10 +236,11 @@ class OrganisationService
     /**
      * Revoke pending invite.
      */
-    public function revokePendingInvite(string $inviteId): bool
+    public function revokePendingInvite(string $orgId, string $inviteeEmail): bool
     {
         $this->makeRequest('DELETE', '/api/backend/v1/pending_org_invites', [
-            'inviteId' => $inviteId,
+            'orgId' => $orgId,
+            'inviteeEmail' => $inviteeEmail,
         ]);
 
         return true;
@@ -377,7 +378,7 @@ class OrganisationService
             'GET' => $request->get($this->authUrl.$endpoint, $data),
             'POST' => $request->post($this->authUrl.$endpoint, $data),
             'PUT' => $request->put($this->authUrl.$endpoint, $data),
-            'DELETE' => $request->delete($this->authUrl.$endpoint),
+            'DELETE' => $request->delete($this->authUrl.$endpoint, $data),
             default => throw new \InvalidArgumentException("Unsupported method: {$method}"),
         };
 

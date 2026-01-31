@@ -257,9 +257,24 @@ describe('OrganisationService', function () {
             ]);
 
             $service = createOrganisationService();
-            $result = $service->addUserToOrganisation('org123', 'user@example.com');
+            $result = $service->addUserToOrganisation('org123', 'user_123');
 
             expect($result)->toBeTrue();
+        });
+
+        test('sends userId in request', function () {
+            Http::fake([
+                'https://auth.example.com/api/backend/v1/org/add_user' => Http::response(['success' => true]),
+            ]);
+
+            $service = createOrganisationService();
+            $service->addUserToOrganisation('org123', 'user_123');
+
+            Http::assertSent(function ($request) {
+                $data = json_decode($request->body(), true);
+
+                return $data['userId'] === 'user_123' && $data['orgId'] === 'org123';
+            });
         });
 
         test('sends role in request', function () {
@@ -268,7 +283,7 @@ describe('OrganisationService', function () {
             ]);
 
             $service = createOrganisationService();
-            $service->addUserToOrganisation('org123', 'user@example.com', role: 'admin');
+            $service->addUserToOrganisation('org123', 'user_123', role: 'admin');
 
             Http::assertSent(function ($request) {
                 $data = json_decode($request->body(), true);
@@ -406,9 +421,24 @@ describe('OrganisationService', function () {
             ]);
 
             $service = createOrganisationService();
-            $result = $service->revokePendingInvite('inv_1');
+            $result = $service->revokePendingInvite('org123', 'user@example.com');
 
             expect($result)->toBeTrue();
+        });
+
+        test('sends orgId and inviteeEmail in request', function () {
+            Http::fake([
+                'https://auth.example.com/api/backend/v1/pending_org_invites' => Http::response(['success' => true]),
+            ]);
+
+            $service = createOrganisationService();
+            $service->revokePendingInvite('org123', 'user@example.com');
+
+            Http::assertSent(function ($request) {
+                $data = json_decode($request->body(), true);
+
+                return $data['orgId'] === 'org123' && $data['inviteeEmail'] === 'user@example.com';
+            });
         });
     });
 

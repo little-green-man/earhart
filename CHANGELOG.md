@@ -2,7 +2,13 @@
 
 All notable changes to `earhart` will be documented in this file.
 
-## [1.5.0] - 2025
+## [1.6.0] - 2026
+
+- Reinstated webhook middleware and clarified Readme around use of webhook middleware vs optional more advanced webhook handling.
+- Fixed issue with `addUserToOrganisation` API
+- Extensive additions to the API documentation and refinements to existing documentation
+
+## [1.5.0] - 2026
 
 ### Added
 - **Token Refresh Documentation**: Comprehensive guide for implementing automatic PropelAuth token refresh
@@ -16,12 +22,12 @@ All notable changes to `earhart` will be documented in this file.
   - Test examples for validating the implementation
 - **README Enhancement**: Added "Refreshing User Tokens" section linking to the comprehensive guide
 
-## [1.4.1] - 2025
+## [1.4.1] - 2026
 
 ### Fixed
 - **Documentation**: Added clarifying comment in logout route example to prevent confusion about Auth::logout() execution order. Fetch refresh token BEFORE calling Auth::logout() to avoid "Attempt to read property 'propel_refresh_token' on null" error.
 
-## [1.4.0] - 2024
+## [1.4.0] - 2026
 
 ### Added
 - **Webhook Signature Verification**: New `WebhookSignatureVerifier` class for validating Svix-signed webhooks
