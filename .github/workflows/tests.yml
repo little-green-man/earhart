@@ -34,9 +34,6 @@ jobs:
             - name: Run Pint
               run: ./vendor/bin/pint --test
 
-            - name: Debug - List files
-              run: ls -la
-
             - name: Run Larastan
               run: ./vendor/bin/phpstan analyse
 
