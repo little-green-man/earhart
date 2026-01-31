@@ -2,6 +2,8 @@
 
 A Laravel package that makes working with PropelAuth easier.
 
+Primarily it helps your app use PropelAuth's OAuth flow to log users in via Socialite, and [API](https://docs.propelauth.com/reference/api/getting-started) integration to retrieve and manage user and organisation data.
+
 ## Features
 
 * **Authentication**: Socialite integration with easy route controllers for PropelAuth OAuth
