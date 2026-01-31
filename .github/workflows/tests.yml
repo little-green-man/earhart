@@ -35,7 +35,7 @@ jobs:
               run: ./vendor/bin/pint --test
 
             - name: Run Larastan
-              run: ./vendor/bin/phpstan analyse
+              run: ./vendor/bin/phpstan analyse -cphpstan.neon
 
     test:
         name: Test PHP ${{ matrix.php }} with Laravel ${{ matrix.laravel }}
