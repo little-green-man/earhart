@@ -1,0 +1,98 @@
+#!/bin/bash
+# Pre-push Git Hook
+# Automatically validates releases before pushing version tags
+# Prevents accidental bad releases by running quality checks
+#
+# This hook runs when you push. If you're pushing a version tag (v*.*.*)
+# it validates the version and runs the full test suite.
+#
+# To install:
+#   git config core.hooksPath .githooks
+#   chmod +x .githooks/pre-push
+#
+# To bypass (emergency only):
+#   git push --no-verify
+
+set -e
+
+# Get the remote name
+remote="$1"
+
+# Read all refs being pushed
+while read local_ref local_sha remote_ref remote_sha; do
+  # Check if this is a version tag push (v*.*.*)
+  if [[ "$local_ref" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🚀 Release Tag Detected - Running Pre-Push Validation"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Extract version from tag (remove refs/tags/v prefix)
+    TAG_VERSION="${local_ref#refs/tags/v}"
+
+    # Get version from composer.json
+    if [ ! -f "composer.json" ]; then
+      echo "❌ Error: composer.json not found"
+      exit 1
+    fi
+
+    COMPOSER_VERSION=$(php -r "echo json_decode(file_get_contents('composer.json'), true)['version'] ?? '';" 2>/dev/null)
+
+    if [ -z "$COMPOSER_VERSION" ]; then
+      echo "❌ Error: Could not read version from composer.json"
+      exit 1
+    fi
+
+    # Validate version consistency
+    echo "📋 Validating version consistency..."
+    if [ "$TAG_VERSION" != "$COMPOSER_VERSION" ]; then
+      echo "❌ Version Mismatch!"
+      echo ""
+      echo "   Tag version:          v$TAG_VERSION"
+      echo "   composer.json version: $COMPOSER_VERSION"
+      echo ""
+      echo "Fix: Update the 'version' field in composer.json to $TAG_VERSION"
+      echo ""
+      exit 1
+    fi
+    echo "   ✅ Tag v$TAG_VERSION matches composer.json"
+    echo ""
+
+    # Run tests
+    echo "🧪 Running Pest tests..."
+    if ! ./vendor/bin/pest --quiet; then
+      echo "❌ Tests failed!"
+      exit 1
+    fi
+    echo "   ✅ All tests passed"
+    echo ""
+
+    # Run static analysis
+    echo "📊 Running Larastan (static analysis)..."
+    if ! ./vendor/bin/phpstan analyse --quiet; then
+      echo "❌ Static analysis failed!"
+      exit 1
+    fi
+    echo "   ✅ Static analysis passed"
+    echo ""
+
+    # Run code style check
+    echo "✨ Checking code style with Pint..."
+    if ! ./vendor/bin/pint --test --quiet; then
+      echo "❌ Code style issues found!"
+      echo ""
+      echo "Run 'composer run lint:fix' to auto-fix formatting issues"
+      exit 1
+    fi
+    echo "   ✅ Code style is correct"
+    echo ""
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "✅ All checks passed! Release v$TAG_VERSION is ready."
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+  fi
+done
+
+exit 0

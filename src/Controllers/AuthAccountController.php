@@ -11,6 +11,6 @@ class AuthAccountController
      */
     public function __invoke(Request $request)
     {
-        return redirect(config('services.propelauth.auth_url') . '/account');
+        return redirect(config('services.propelauth.auth_url').'/account');
     }
 }

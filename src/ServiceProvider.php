@@ -12,10 +12,10 @@ class ServiceProvider extends BaseServiceProvider
     public function boot()
     {
         $this->publishes([
-            __DIR__ . '/../config/earhart.php' => config_path('earhart.php'),
+            __DIR__.'/../config/earhart.php' => config_path('earhart.php'),
         ], 'config');
 
-        $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
+        $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
 
         // Validate required configuration after everything is set up
         $this->validateConfiguration();
@@ -23,7 +23,7 @@ class ServiceProvider extends BaseServiceProvider
 
     public function register()
     {
-        $this->mergeConfigFrom(__DIR__ . '/../config/earhart.php', 'earhart');
+        $this->mergeConfigFrom(__DIR__.'/../config/earhart.php', 'earhart');
 
         // Register CacheService
         $this->app->singleton(CacheService::class, function ($app) {
@@ -85,11 +85,11 @@ class ServiceProvider extends BaseServiceProvider
 
         foreach ($requiredKeys as $key => $label) {
             $value = config("earhart.{$key}");
-            if (!$value) {
+            if (! $value) {
                 $envKey = strtoupper($key);
                 throw new \RuntimeException(
                     "{$label} is not configured. "
-                    . "Please set PROPELAUTH_{$envKey} environment variable or configure earhart.{$key} in config/earhart.php",
+                    ."Please set PROPELAUTH_{$envKey} environment variable or configure earhart.{$key} in config/earhart.php",
                 );
             }
         }

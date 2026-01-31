@@ -55,13 +55,13 @@ class WebhookEventEnricher
      */
     public function enrichUserData(object $event, string $userIdProperty = 'user_id'): ?UserData
     {
-        if (!property_exists($event, $userIdProperty)) {
+        if (! property_exists($event, $userIdProperty)) {
             return null;
         }
 
         $userId = $event->$userIdProperty;
 
-        if (!$userId) {
+        if (! $userId) {
             return null;
         }
 
@@ -82,13 +82,13 @@ class WebhookEventEnricher
      */
     public function enrichOrgData(object $event, string $orgIdProperty = 'org_id'): ?OrganisationData
     {
-        if (!property_exists($event, $orgIdProperty)) {
+        if (! property_exists($event, $orgIdProperty)) {
             return null;
         }
 
         $orgId = $event->$orgIdProperty;
 
-        if (!$orgId) {
+        if (! $orgId) {
             return null;
         }
 
@@ -105,7 +105,7 @@ class WebhookEventEnricher
      */
     public function getUserData(string $userId): UserData
     {
-        if (!isset($this->userDataCache[$userId])) {
+        if (! isset($this->userDataCache[$userId])) {
             $this->userDataCache[$userId] = $this->userService->getUser($userId, fresh: true);
         }
 
@@ -122,7 +122,7 @@ class WebhookEventEnricher
      */
     public function getOrgData(string $orgId): OrganisationData
     {
-        if (!isset($this->orgDataCache[$orgId])) {
+        if (! isset($this->orgDataCache[$orgId])) {
             $this->orgDataCache[$orgId] = $this->orgService->getOrganisation($orgId, fresh: true);
         }
 

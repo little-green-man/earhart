@@ -11,6 +11,6 @@ class AuthOrgCreateController
      */
     public function __invoke(Request $request)
     {
-        return redirect(config('services.propelauth.auth_url') . '/create_org');
+        return redirect(config('services.propelauth.auth_url').'/create_org');
     }
 }

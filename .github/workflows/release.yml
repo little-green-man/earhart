@@ -1,37 +1,38 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
+    push:
+        tags:
+            - "v*.*.*"
+
+permissions:
+    contents: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+    release:
+        name: Create GitHub Release
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
 
-    steps:
-      - uses: actions/checkout@v3
+            - name: Setup PHP
+              uses: shivammathur/setup-php@v2
+              with:
+                  php-version: "8.5"
+                  coverage: none
 
-      - name: Validate version consistency
-        run: |
-          # Extract version from tag (remove 'v' prefix)
-          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+            - name: Validate version consistency
+              run: |
+                  TAG_VERSION=${GITHUB_REF#refs/tags/v}
+                  COMPOSER_VERSION=$(php -r "echo json_decode(file_get_contents('composer.json'))->version;")
 
-          # Extract version from composer.json
-          COMPOSER_VERSION=$(php -r "echo json_decode(file_get_contents('composer.json'))->version;")
+                  if [ "$TAG_VERSION" != "$COMPOSER_VERSION" ]; then
+                    echo "❌ Error: Tag version ($TAG_VERSION) doesn't match composer.json version ($COMPOSER_VERSION)"
+                    exit 1
+                  fi
+                  echo "✅ Versions match: $TAG_VERSION"
 
-          # Compare versions
-          if [ "$TAG_VERSION" != "$COMPOSER_VERSION" ]; then
-            echo "Error: Tag version ($TAG_VERSION) doesn't match composer.json version ($COMPOSER_VERSION)"
-            exit 1
-          fi
-
-      - name: Create GitHub Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
+            - name: Create GitHub Release
+              uses: softprops/action-gh-release@v1
+              with:
+                  generate_release_notes: true
