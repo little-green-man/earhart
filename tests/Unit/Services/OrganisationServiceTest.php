@@ -14,6 +14,10 @@ use LittleGreenMan\Earhart\Tests\TestCase;
 uses(TestCase::class);
 
 describe('OrganisationService', function () {
+    beforeEach(function () {
+        Http::preventStrayRequests();
+    });
+
     function createOrganisationService($cacheEnabled = false): OrganisationService
     {
         return new OrganisationService(

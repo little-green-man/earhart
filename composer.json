@@ -52,5 +52,13 @@
         "allow-plugins": {
             "pestphp/pest-plugin": true
         }
+    },
+    "scripts": {
+        "test": "pest",
+        "test:unit": "pest --group=unit",
+        "test:integration": "pest --group=integration",
+        "test:fast": "pest --exclude-group=slow",
+        "test:coverage": "pest --coverage",
+        "test:profile": "pest --profile"
     }
 }

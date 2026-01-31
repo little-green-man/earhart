@@ -13,25 +13,25 @@ describe('CacheService', function () {
         $service = new CacheService(enabled: true, ttlMinutes: 60);
 
         expect($service->isEnabled())->toBeTrue();
-    });
+    })->group('unit', 'fast');
 
     test('can be instantiated with disabled flag', function () {
         $service = new CacheService(enabled: false);
 
         expect($service->isEnabled())->toBeFalse();
-    });
+    })->group('unit', 'fast');
 
     test('defaults to disabled', function () {
         $service = new CacheService;
 
         expect($service->isEnabled())->toBeFalse();
-    });
+    })->group('unit', 'fast');
 
     test('converts ttl minutes to seconds', function () {
         $service = new CacheService(enabled: true, ttlMinutes: 120);
 
         expect($service->getTtl())->toBe(7200);
-    });
+    })->group('unit', 'fast');
 
     test('get calls callback when cache is disabled', function () {
         $service = new CacheService(enabled: false);
@@ -45,7 +45,7 @@ describe('CacheService', function () {
 
         expect($called)->toBeTrue();
         expect($result)->toBe('value');
-    });
+    })->group('unit', 'fast');
 
     test('get uses cache when enabled', function () {
         $service = new CacheService(enabled: true, ttlMinutes: 60);
@@ -58,7 +58,7 @@ describe('CacheService', function () {
         $result = $service->get('test-key', fn () => 'value');
 
         expect($result)->toBe('cached-value');
-    });
+    })->group('unit', 'fast');
 
     test('forget returns true when cache is disabled', function () {
         $service = new CacheService(enabled: false);
@@ -66,7 +66,7 @@ describe('CacheService', function () {
         $result = $service->forget('test-key');
 
         expect($result)->toBeTrue();
-    });
+    })->group('unit', 'fast');
 
     test('forget deletes from cache when enabled', function () {
         $service = new CacheService(enabled: true);
@@ -79,7 +79,7 @@ describe('CacheService', function () {
         $result = $service->forget('test-key');
 
         expect($result)->toBeTrue();
-    });
+    })->group('unit', 'fast');
 
     test('flush does nothing when cache is disabled', function () {
         $service = new CacheService(enabled: false);
@@ -88,7 +88,7 @@ describe('CacheService', function () {
         $service->flush();
 
         expect(true)->toBeTrue();
-    });
+    })->group('unit', 'fast');
 
     test('flush clears all propelauth cache when enabled', function () {
         $service = new CacheService(enabled: true);
@@ -103,7 +103,7 @@ describe('CacheService', function () {
         $service->flush();
 
         expect(true)->toBeTrue();
-    });
+    })->group('unit', 'fast');
 
     test('invalidateUser forgets user cache key', function () {
         $service = new CacheService(enabled: true);
@@ -116,7 +116,7 @@ describe('CacheService', function () {
         $service->invalidateUser('user123');
 
         expect(true)->toBeTrue();
-    });
+    })->group('unit', 'fast');
 
     test('invalidateOrganisation forgets organisation caches', function () {
         $service = new CacheService(enabled: true);
@@ -126,7 +126,7 @@ describe('CacheService', function () {
         $service->invalidateOrganisation('org456');
 
         expect(true)->toBeTrue();
-    });
+    })->group('unit', 'fast');
 
     test('builds cache key with namespace', function () {
         $service = new CacheService(enabled: true);
@@ -139,11 +139,11 @@ describe('CacheService', function () {
         $result = $service->get('custom-key', fn () => 'value');
 
         expect($result)->toBe('value');
-    });
+    })->group('unit', 'fast');
 
     test('default ttl is 60 minutes', function () {
         $service = new CacheService(enabled: true);
 
         expect($service->getTtl())->toBe(3600);
-    });
+    })->group('unit', 'fast');
 });

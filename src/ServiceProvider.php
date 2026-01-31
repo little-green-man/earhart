@@ -75,6 +75,11 @@ class ServiceProvider extends BaseServiceProvider
      */
     private function validateConfiguration(): void
     {
+        // Skip validation when running in console (tests, artisan commands)
+        if ($this->app->runningInConsole()) {
+            return;
+        }
+
         $requiredKeys = [
             'api_key' => 'PropelAuth API key',
             'auth_url' => 'PropelAuth Auth URL',

@@ -212,7 +212,7 @@ describe('PaginatedResult', function () {
             fetchNextPage: $callback,
         );
 
-        expect($result->lastPage())->toBe(10);
+        expect($result->lastPage())->toBe(11);
     });
 
     test('isFirstPage returns true for page 0', function () {

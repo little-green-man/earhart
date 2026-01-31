@@ -14,6 +14,10 @@ use LittleGreenMan\Earhart\Tests\TestCase;
 uses(TestCase::class);
 
 describe('UserService', function () {
+    beforeEach(function () {
+        Http::preventStrayRequests();
+    });
+
     function createUserService($cacheEnabled = false): UserService
     {
         return new UserService(
@@ -60,7 +64,7 @@ describe('UserService', function () {
                 ->toBe('user123')
                 ->and($user->email)
                 ->toBe('test@example.com');
-        });
+        })->group('integration', 'slow');
 
         test('throws exception when user not found', function () {
             Http::fake([
@@ -70,7 +74,7 @@ describe('UserService', function () {
             $service = createUserService();
 
             expect(fn () => $service->getUser('invalid'))->toThrow(InvalidUserException::class);
-        });
+        })->group('integration', 'slow');
 
         test('bypasses cache when fresh flag is true', function () {
             Http::fake([
@@ -84,7 +88,7 @@ describe('UserService', function () {
             Http::assertSent(function ($request) {
                 return str_contains($request->url(), 'user123');
             });
-        });
+        })->group('integration', 'slow');
     });
 
     describe('getUserByEmail', function () {
@@ -97,7 +101,7 @@ describe('UserService', function () {
             $user = $service->getUserByEmail('test@example.com');
 
             expect($user)->toBeInstanceOf(UserData::class)->and($user->email)->toBe('test@example.com');
-        });
+        })->group('integration', 'slow');
 
         test('throws exception when email not found', function () {
             Http::fake([
@@ -107,7 +111,7 @@ describe('UserService', function () {
             $service = createUserService();
 
             expect(fn () => $service->getUserByEmail('notfound@example.com'))->toThrow(InvalidUserException::class);
-        });
+        })->group('integration', 'slow');
 
         test('includes orgs in response by default', function () {
             Http::fake([
@@ -122,7 +126,7 @@ describe('UserService', function () {
                     $request->url()
                     === 'https://auth.example.com/api/backend/v1/user/email?email=test%40example.com&includeOrgs=1';
             });
-        });
+        })->group('integration', 'slow');
     });
 
     describe('getUserByUsername', function () {
@@ -135,7 +139,7 @@ describe('UserService', function () {
             $user = $service->getUserByUsername('johndoe');
 
             expect($user)->toBeInstanceOf(UserData::class)->and($user->username)->toBe('johndoe');
-        });
+        })->group('integration', 'slow');
 
         test('throws exception when username not found', function () {
             Http::fake([
@@ -145,7 +149,7 @@ describe('UserService', function () {
             $service = createUserService();
 
             expect(fn () => $service->getUserByUsername('notfound'))->toThrow(InvalidUserException::class);
-        });
+        })->group('integration', 'slow');
     });
 
     describe('queryUsers', function () {
@@ -171,7 +175,7 @@ describe('UserService', function () {
                 ->toBe(100)
                 ->and($result->hasNextPage())
                 ->toBeTrue();
-        });
+        })->group('integration', 'slow');
 
         test('filters by email or username', function () {
             Http::fake([
@@ -190,7 +194,7 @@ describe('UserService', function () {
             Http::assertSent(function ($request) {
                 return str_contains($request->url(), 'emailOrUsername=john');
             });
-        });
+        })->group('integration', 'slow');
 
         test('sorts results by specified order', function () {
             Http::fake([
@@ -209,7 +213,7 @@ describe('UserService', function () {
             Http::assertSent(function ($request) {
                 return str_contains($request->url(), 'orderBy=EMAIL');
             });
-        });
+        })->group('integration', 'slow');
     });
 
     describe('createUser', function () {
@@ -224,7 +228,7 @@ describe('UserService', function () {
             $userId = $service->createUser('newuser@example.com');
 
             expect($userId)->toBe('new-user-id');
-        });
+        })->group('integration', 'slow');
 
         test('sends all user data', function () {
             Http::fake([
@@ -255,7 +259,7 @@ describe('UserService', function () {
                     && $data['password'] === 'password123'
                     && $data['sendEmailToConfirmEmailAddress'] === true;
             });
-        });
+        })->group('integration', 'slow');
     });
 
     describe('updateUser', function () {
@@ -268,7 +272,7 @@ describe('UserService', function () {
             $result = $service->updateUser('user123', firstName: 'Jane');
 
             expect($result)->toBeTrue();
-        });
+        })->group('integration', 'slow');
 
         test('invalidates user cache after update', function () {
             Http::fake([
@@ -296,7 +300,7 @@ describe('UserService', function () {
 
                 return isset($data['firstName']) && isset($data['pictureUrl']) && ! isset($data['lastName']);
             });
-        });
+        })->group('integration', 'slow');
     });
 
     describe('updateUserEmail', function () {
@@ -309,7 +313,7 @@ describe('UserService', function () {
             $result = $service->updateUserEmail('user123', 'newemail@example.com');
 
             expect($result)->toBeTrue();
-        });
+        })->group('integration', 'slow');
 
         test('requires email confirmation by default', function () {
             Http::fake([
@@ -322,7 +326,7 @@ describe('UserService', function () {
             Http::assertSent(function ($request) {
                 return $request->data()['requireEmailConfirmation'] === true;
             });
-        });
+        })->group('integration', 'slow');
     });
 
     describe('updateUserPassword', function () {
@@ -335,20 +339,20 @@ describe('UserService', function () {
             $result = $service->updateUserPassword('user123', 'newpassword123');
 
             expect($result)->toBeTrue();
-        });
+        })->group('integration', 'slow');
     });
 
     describe('clearUserPassword', function () {
         test('clears user password', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123/picture' => Http::response(''),
+                'https://auth.example.com/api/backend/v1/user/user123/clear_password' => Http::response(''),
             ]);
 
             $service = createUserService();
             $result = $service->clearUserPassword('user123');
 
             expect($result)->toBeTrue();
-        });
+        })->group('integration', 'slow');
     });
 
     describe('createMagicLink', function () {
@@ -363,7 +367,7 @@ describe('UserService', function () {
             $url = $service->createMagicLink('test@example.com');
 
             expect($url)->toBe('https://auth.example.com/magic/link123');
-        });
+        })->group('integration', 'slow');
 
         test('includes redirect url if provided', function () {
             Http::fake([
@@ -378,7 +382,7 @@ describe('UserService', function () {
             Http::assertSent(function ($request) {
                 return $request->data()['redirectToUrl'] === 'https://myapp.com/dashboard';
             });
-        });
+        })->group('integration', 'slow');
     });
 
     describe('createAccessToken', function () {
@@ -393,7 +397,7 @@ describe('UserService', function () {
             $token = $service->createAccessToken('user123');
 
             expect($token)->toBe('token123');
-        });
+        })->group('integration', 'slow');
 
         test('defaults to 24 hour duration', function () {
             Http::fake([
@@ -408,59 +412,59 @@ describe('UserService', function () {
             Http::assertSent(function ($request) {
                 return $request->data()['durationInMinutes'] === 1440;
             });
-        });
+        })->group('integration', 'slow');
     });
 
     describe('disableUser', function () {
         test('disables user account', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(''),
+                'https://auth.example.com/api/backend/v1/user/user123/disable' => Http::response(''),
             ]);
 
             $service = createUserService();
             $result = $service->disableUser('user123');
 
             expect($result)->toBeTrue();
-        });
+        })->group('integration', 'slow');
     });
 
     describe('enableUser', function () {
         test('enables user account', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(''),
+                'https://auth.example.com/api/backend/v1/user/user123/enable' => Http::response(''),
             ]);
 
             $service = createUserService();
             $result = $service->enableUser('user123');
 
             expect($result)->toBeTrue();
-        });
+        })->group('integration', 'slow');
     });
 
     describe('deleteUser', function () {
         test('deletes user account', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123/email' => Http::response(''),
+                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(''),
             ]);
 
             $service = createUserService();
             $result = $service->deleteUser('user123');
 
             expect($result)->toBeTrue();
-        });
+        })->group('integration', 'slow');
     });
 
     describe('disable2FA', function () {
         test('disables 2FA for user', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(''),
+                'https://auth.example.com/api/backend/v1/user/user123/disable_2fa' => Http::response(''),
             ]);
 
             $service = createUserService();
             $result = $service->disable2FA('user123');
 
             expect($result)->toBeTrue();
-        });
+        })->group('integration', 'slow');
     });
 
     describe('resendEmailConfirmation', function () {
@@ -473,7 +477,7 @@ describe('UserService', function () {
             $result = $service->resendEmailConfirmation('user123');
 
             expect($result)->toBeTrue();
-        });
+        })->group('integration', 'slow');
     });
 
     describe('logoutAllSessions', function () {
@@ -486,7 +490,7 @@ describe('UserService', function () {
             $result = $service->logoutAllSessions('user123');
 
             expect($result)->toBeTrue();
-        });
+        })->group('integration', 'slow');
     });
 
     describe('migrateUserFromExternal', function () {
@@ -530,20 +534,20 @@ describe('UserService', function () {
                     && $data['existingUserId'] === 'old-id-123'
                     && $data['existingPasswordHash'] === 'hash123';
             });
-        });
+        })->group('integration', 'slow');
     });
 
     describe('migrateUserPassword', function () {
         test('migrates user password from external source', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/migrate_user/user123' => Http::response(''),
+                'https://auth.example.com/api/backend/v1/migrate_user/password' => Http::response(''),
             ]);
 
             $service = createUserService();
             $result = $service->migrateUserPassword('user123', 'bcrypt_hash_123');
 
             expect($result)->toBeTrue();
-        });
+        })->group('integration', 'slow');
     });
 
     describe('rate limiting', function () {
@@ -555,7 +559,7 @@ describe('UserService', function () {
             $service = createUserService();
 
             expect(fn () => $service->getUser('user123'))->toThrow(RateLimitException::class);
-        });
+        })->group('integration', 'slow');
 
         test('retries on rate limit exception', function () {
             $callCount = 0;
@@ -593,6 +597,6 @@ describe('UserService', function () {
             $service = createUserService();
 
             expect(fn () => $service->getUser('user123'))->toThrow(\Exception::class);
-        });
+        })->group('integration', 'slow');
     });
 });
