@@ -1,6 +1,8 @@
 # Using the PropelAuth API
 
-This guide provides comprehensive examples for interacting with the PropelAuth API from your Laravel application using Earhart. For installation and initial setup, see the [README](../README.md).
+This guide shows you how to use PropelAuth's API from your Laravel application via Earhart. For installation and setup, see the [README](../README.md).
+
+> **PropelAuth API Reference**: [https://docs.propelauth.com/reference/api/getting-started](https://docs.propelauth.com/reference/api/getting-started)
 
 ## Table of Contents
 
@@ -25,7 +27,7 @@ This guide provides comprehensive examples for interacting with the PropelAuth A
 
 ## Getting Started
 
-The PropelAuth API is accessible through the `app('earhart')` helper or by injecting the `Earhart` class. All API methods require your PropelAuth API key to be configured in your environment.
+Access the PropelAuth API through the `app('earhart')` helper or dependency injection:
 
 ```php
 use LittleGreenMan\Earhart\Earhart;
@@ -33,15 +35,21 @@ use LittleGreenMan\Earhart\Earhart;
 // Using the helper
 $earhart = app('earhart');
 
-// Or via dependency injection
+// Via dependency injection
 public function __construct(protected Earhart $earhart) {}
 ```
 
+Ensure your PropelAuth API key is configured in `.env` as `PROPELAUTH_API_KEY`.
+
 ## User Management
+
+> **PropelAuth User API Reference**: [https://docs.propelauth.com/reference/api/user](https://docs.propelauth.com/reference/api/user)
 
 ### Fetching Users
 
 #### Get a Single User by ID
+
+> **API Reference**: [Fetch User By User ID](https://docs.propelauth.com/reference/api/user#fetch-user-by-user-id)
 
 ```php
 use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
@@ -79,6 +87,8 @@ try {
 
 #### Fetch User by Email
 
+> **API Reference**: [Fetch User By Email](https://docs.propelauth.com/reference/api/user#fetch-user-by-email)
+
 ```php
 try {
     $user = app('earhart')->getUserByEmail('user@example.com');
@@ -90,6 +100,8 @@ try {
 
 #### Fetch User by Username
 
+> **API Reference**: [Fetch User By Username](https://docs.propelauth.com/reference/api/user#fetch-user-by-username)
+
 ```php
 try {
     $user = app('earhart')->getUserByUsername('johndoe', includeOrgs: true);
@@ -100,6 +112,8 @@ try {
 ```
 
 #### Query Users with Filters
+
+> **API Reference**: [Query Users](https://docs.propelauth.com/reference/api/user#query-users)
 
 ```php
 // Search users by email or username
@@ -139,6 +153,8 @@ $allUsers = $result->allPages();
 
 #### Create a Basic User
 
+> **API Reference**: [Create User](https://docs.propelauth.com/reference/api/user#create-user)
+
 ```php
 $userId = app('earhart')->createUser(
     email: 'newuser@example.com',
@@ -172,7 +188,7 @@ $userId = app('earhart')->createUser(
 #### Create User Without Password (Passwordless Auth)
 
 ```php
-// User will use magic links or social login
+// User must use magic links or social login
 $userId = app('earhart')->createUser(
     email: 'newuser@example.com',
     firstName: 'Jane',
@@ -183,6 +199,8 @@ $userId = app('earhart')->createUser(
 ### Updating Users
 
 #### Update User Profile
+
+> **API Reference**: [Update User Metadata](https://docs.propelauth.com/reference/api/user#update-user-metadata)
 
 ```php
 app('earhart')->updateUser(
@@ -199,6 +217,8 @@ app('earhart')->updateUser(
 ```
 
 #### Update User Email
+
+> **API Reference**: [Update User Email](https://docs.propelauth.com/reference/api/user#update-user-email)
 
 ```php
 // Email update with confirmation required
@@ -218,6 +238,8 @@ app('earhart')->updateUserEmail(
 
 #### Update User Password
 
+> **API Reference**: [Update User Password](https://docs.propelauth.com/reference/api/user#update-user-password)
+
 ```php
 // Set new password
 app('earhart')->updateUserPassword(
@@ -236,6 +258,8 @@ app('earhart')->updateUserPassword(
 
 #### Clear User Password
 
+> **API Reference**: [Clear User Password](https://docs.propelauth.com/reference/api/user#clear-user-password)
+
 ```php
 // Remove password (user must use magic links or social login)
 app('earhart')->clearUserPassword('user_id_here');
@@ -244,6 +268,8 @@ app('earhart')->clearUserPassword('user_id_here');
 ### User Authentication
 
 #### Create Magic Link
+
+> **API Reference**: [Create Magic Link](https://docs.propelauth.com/reference/api/user#create-magic-link)
 
 ```php
 // Create magic link for passwordless login
@@ -259,6 +285,8 @@ Mail::to('user@example.com')->send(new MagicLinkEmail($magicLink));
 ```
 
 #### Create Access Token
+
+> **API Reference**: [Create Access Token](https://docs.propelauth.com/reference/api/user#create-access-token)
 
 ```php
 // Create a 24-hour access token
@@ -276,6 +304,8 @@ $response = Http::withToken($accessToken)->get('...');
 
 #### Enable/Disable User
 
+> **API Reference**: [Enable/Disable User](https://docs.propelauth.com/reference/api/user#enabledisable-user)
+
 ```php
 // Disable user (blocks login)
 app('earhart')->disableUser('user_id_here');
@@ -286,24 +316,32 @@ app('earhart')->enableUser('user_id_here');
 
 #### Delete User
 
+> **API Reference**: [Delete User](https://docs.propelauth.com/reference/api/user#delete-user)
+
 ```php
 app('earhart')->deleteUser('user_id_here');
 ```
 
 #### Disable Two-Factor Authentication
 
+> **API Reference**: [Disable 2FA](https://docs.propelauth.com/reference/api/user#disable-2fa)
+
 ```php
-// Remove 2FA from a user's account
+// Remove 2FA from user's account
 app('earhart')->disable2FA('user_id_here');
 ```
 
 #### Resend Email Confirmation
+
+> **API Reference**: [Resend Email Confirmation](https://docs.propelauth.com/reference/api/user#resend-email-confirmation)
 
 ```php
 app('earhart')->resendEmailConfirmation('user_id_here');
 ```
 
 #### Logout All Sessions
+
+> **API Reference**: [Logout User](https://docs.propelauth.com/reference/api/user#logout-user)
 
 ```php
 // Force logout from all devices
@@ -312,18 +350,24 @@ app('earhart')->logoutAllSessions('user_id_here');
 
 #### Get User Signup Parameters
 
+> **API Reference**: [Fetch User Signup Query Params](https://docs.propelauth.com/reference/api/user#fetch-user-signup-query-params)
+
 ```php
-// Retrieve the query parameters from when user signed up
+// Retrieve query parameters from when user signed up
 $params = app('earhart')->getUserSignupParams('user_id_here');
 
 // Example: ['utm_source' => 'google', 'utm_campaign' => 'summer2024']
 ```
 
-## Organization Management
+## Organisation Management
 
-### Fetching Organizations
+> **PropelAuth Organisation API Reference**: [https://docs.propelauth.com/reference/api/org](https://docs.propelauth.com/reference/api/org)
 
-#### Get Single Organization
+### Fetching Organisations
+
+#### Get Single Organisation
+
+> **API Reference**: [Fetch Org](https://docs.propelauth.com/reference/api/org#fetch-org)
 
 ```php
 use LittleGreenMan\Earhart\Exceptions\InvalidOrgException;
@@ -348,10 +392,11 @@ try {
 }
 ```
 
-#### Query All Organizations
+#### Query All Organisations
+
+> **API Reference**: [Fetch Orgs](https://docs.propelauth.com/reference/api/org#fetch-orgs)
 
 ```php
-// Fetch organizations with pagination
 $result = app('earhart')->organisations()->queryOrganisations(
     orderBy: 'CREATED_AT_DESC',
     pageNumber: 0,
@@ -364,7 +409,9 @@ foreach ($result->items as $orgData) {
 }
 ```
 
-#### Get Users in Organization
+#### Get Users in Organisation
+
+> **API Reference**: [Fetch Users in Org](https://docs.propelauth.com/reference/api/org#fetch-users-in-org)
 
 ```php
 $result = app('earhart')->organisations()->getOrganisationUsers(
@@ -379,13 +426,13 @@ foreach ($result->items as $userData) {
     echo "{$user->email} - {$user->first_name} {$user->last_name}\n";
 }
 
-// Legacy method (still supported)
-$usersData = app('earhart')->getUsersInOrganisation('org_id_here');
 ```
 
-### Creating & Updating Organizations
+### Creating & Updating Organisations
 
-#### Create Organization
+#### Create Organisation
+
+> **API Reference**: [Create Org](https://docs.propelauth.com/reference/api/org#create-org)
 
 ```php
 $orgId = app('earhart')->organisations()->createOrganisation(
@@ -401,7 +448,9 @@ $orgId = app('earhart')->organisations()->createOrganisation(
 echo "Created organization with ID: {$orgId}";
 ```
 
-#### Update Organization
+#### Update Organisation
+
+> **API Reference**: [Update Org](https://docs.propelauth.com/reference/api/org#update-org)
 
 ```php
 app('earhart')->organisations()->updateOrganisation(
@@ -414,7 +463,9 @@ app('earhart')->organisations()->updateOrganisation(
 );
 ```
 
-#### Delete Organization
+#### Delete Organisation
+
+> **API Reference**: [Delete Org](https://docs.propelauth.com/reference/api/org#delete-org)
 
 ```php
 try {
@@ -425,9 +476,11 @@ try {
 }
 ```
 
-### Managing Organization Members
+### Managing Organisation Members
 
-#### Add User to Organization
+#### Add User to Organisation
+
+> **API Reference**: [Add User to Org](https://docs.propelauth.com/reference/api/org#add-user-to-org)
 
 ```php
 // Add existing user to organization
@@ -438,10 +491,11 @@ app('earhart')->organisations()->addUserToOrganisation(
 );
 ```
 
-#### Invite User to Organization
+#### Invite User to Organisation
+
+> **API Reference**: [Invite User to Org](https://docs.propelauth.com/reference/api/org#invite-user-to-org)
 
 ```php
-// Send invitation email
 app('earhart')->organisations()->inviteUserToOrganisation(
     orgId: 'org_id_here',
     email: 'newuser@example.com',
@@ -449,7 +503,9 @@ app('earhart')->organisations()->inviteUserToOrganisation(
 );
 ```
 
-#### Remove User from Organization
+#### Remove User from Organisation
+
+> **API Reference**: [Remove User from Org](https://docs.propelauth.com/reference/api/org#remove-user-from-org)
 
 ```php
 app('earhart')->organisations()->removeUserFromOrganisation(
@@ -460,6 +516,8 @@ app('earhart')->organisations()->removeUserFromOrganisation(
 
 #### Change User Role
 
+> **API Reference**: [Change User Role in Org](https://docs.propelauth.com/reference/api/org#change-user-role-in-org)
+
 ```php
 app('earhart')->organisations()->changeUserRole(
     orgId: 'org_id_here',
@@ -468,9 +526,11 @@ app('earhart')->organisations()->changeUserRole(
 );
 ```
 
-### Organization Roles
+### Organisation Roles
 
 #### Get Role Mappings
+
+> **API Reference**: [Fetch Custom Role Mappings](https://docs.propelauth.com/reference/api/org#fetch-custom-role-mappings)
 
 ```php
 $roleMappings = app('earhart')->organisations()->getRoleMappings();
@@ -482,7 +542,9 @@ foreach ($roleMappings as $mapping) {
 }
 ```
 
-#### Subscribe Organization to Role Mapping
+#### Subscribe Organisation to Role Mapping
+
+> **API Reference**: [Subscribe Org to Role Mapping](https://docs.propelauth.com/reference/api/org#subscribe-org-to-role-mapping)
 
 ```php
 app('earhart')->organisations()->subscribeOrgToRoleMapping(
@@ -491,9 +553,11 @@ app('earhart')->organisations()->subscribeOrgToRoleMapping(
 );
 ```
 
-### Organization Invites
+### Organisation Invites
 
 #### Get Pending Invites
+
+> **API Reference**: [Fetch Pending Invites](https://docs.propelauth.com/reference/api/org#fetch-pending-invites)
 
 ```php
 // Get all pending invites
@@ -511,6 +575,8 @@ $result = app('earhart')->organisations()->getPendingInvites(orgId: 'org_id_here
 
 #### Revoke Pending Invite
 
+> **API Reference**: [Revoke Invite](https://docs.propelauth.com/reference/api/org#revoke-invite)
+
 ```php
 app('earhart')->organisations()->revokePendingInvite(
     orgId: 'org_id_here',
@@ -520,7 +586,9 @@ app('earhart')->organisations()->revokePendingInvite(
 
 ### SAML Configuration
 
-#### Allow Organization to Setup SAML
+> **API Reference**: [SAML](https://docs.propelauth.com/reference/api/org#saml)
+
+#### Allow Organisation to Setup SAML
 
 ```php
 app('earhart')->organisations()->allowOrgToSetupSAML('org_id_here');
@@ -529,10 +597,7 @@ app('earhart')->organisations()->allowOrgToSetupSAML('org_id_here');
 #### Create SAML Connection Link
 
 ```php
-// Generate a link for org admins to set up SAML
 $url = app('earhart')->organisations()->createSAMLConnectionLink('org_id_here');
-
-// Redirect org admin to this URL
 return redirect($url);
 ```
 
@@ -575,23 +640,21 @@ app('earhart')->organisations()->deleteSAMLConnection('org_id_here');
 app('earhart')->organisations()->disallowOrgToSetupSAML('org_id_here');
 ```
 
-### Organization Isolation
+### Organisation Isolation
 
-#### Migrate Organization to Isolated
+#### Migrate Organisation to Isolated
 
-Isolated organizations are completely separate tenants with their own user base. Users in isolated orgs cannot interact with users in other orgs.
+> **API Reference**: [Migrate Org to Isolated](https://docs.propelauth.com/reference/api/org#migrate-org-to-isolated)
+
+Isolated organisations are completely separate tenants with their own user base.
 
 ```php
-// Convert an organization to isolated mode
 app('earhart')->organisations()->migrateOrgToIsolated('org_id_here');
-
-// Note: This is a one-way operation and cannot be reversed
 ```
 
-**Use Cases for Isolated Organizations:**
-- B2B SaaS with complete data isolation requirements
-- Enterprise customers requiring dedicated tenancy
-- Regulatory compliance scenarios (HIPAA, SOC2, etc.)
+**Note**: This is a one-way operation and cannot be reversed.
+
+**Use cases**: B2B SaaS with complete data isolation, enterprise customers requiring dedicated tenancy, or regulatory compliance (HIPAA, SOC2).
 
 ## Pagination & Data Handling
 
@@ -600,52 +663,35 @@ app('earhart')->organisations()->migrateOrgToIsolated('org_id_here');
 ```php
 $result = app('earhart')->queryUsers(pageSize: 50);
 
-// Check pagination status
 echo "Page {$result->currentPage} of {$result->lastPage()}";
-echo "Showing {$result->count()} of {$result->totalItems} total items";
-
-// Navigation checks
-if ($result->isFirstPage()) {
-    echo "This is the first page";
-}
+echo "Showing {$result->count()} of {$result->totalItems} items";
 
 if ($result->hasNextPage()) {
     $nextPage = $result->nextPage();
 }
 
-if ($result->isLastPage()) {
-    echo "This is the last page";
-}
-
-// Get items as Laravel collection
+// Get as Laravel collection
 $collection = $result->collection();
 $filtered = $collection->filter(fn($user) => $user['enabled'] === true);
 
-// Get all pages at once (use carefully with large datasets)
+// Get all pages (use carefully with large datasets)
 $allItems = $result->allPages();
 ```
 
 ### Converting to Collections
 
 ```php
-$result = app('earhart')->queryUsers();
+$users = app('earhart')->queryUsers()->collection();
 
-// As Laravel collection
-$users = $result->collection();
-
-// Use collection methods
 $activeUsers = $users->filter(fn($u) => $u['enabled'] === true);
 $emails = $users->pluck('email');
-$grouped = $users->groupBy('created_at');
 ```
 
 ## Caching
 
-Earhart includes built-in caching to reduce API calls and improve performance.
+Earhart includes built-in caching to reduce API calls.
 
 ### Cache Configuration
-
-In your `.env`:
 
 ```env
 PROPELAUTH_CACHE_ENABLED=true
@@ -655,14 +701,13 @@ PROPELAUTH_CACHE_TTL=60  # minutes
 ### Using Cache
 
 ```php
-// Cached request (default)
+// Cached (default)
 $user = app('earhart')->getUser('user_id_here');
 
-// Bypass cache and fetch fresh data
+// Fresh data
 $user = app('earhart')->getUser('user_id_here', fresh: true);
 
-// Organizations also support caching
-$org = app('earhart')->organisations()->getOrganisation('org_id_here');
+// Organisations also support caching
 $org = app('earhart')->organisations()->getOrganisation('org_id_here', fresh: true);
 ```
 
@@ -794,8 +839,9 @@ $cacheService->flush();
 
 ### Migrating Users from External Systems
 
+> **API Reference**: [Migrate User](https://docs.propelauth.com/reference/api/user#migrate-user-from-external-source)
+
 ```php
-// Migrate user with existing password hash
 $userId = app('earhart')->migrateUserFromExternal(
     email: 'user@example.com',
     emailConfirmed: true,
@@ -805,38 +851,24 @@ $userId = app('earhart')->migrateUserFromExternal(
     firstName: 'John',
     lastName: 'Doe',
     username: 'johndoe',
-    properties: [
-        'legacy_id' => 'old_system_id_123',
-        'migrated_at' => now()->toIso8601String()
-    ]
+    properties: ['legacy_id' => 'old_system_id_123']
 );
-
-echo "Migrated user with new ID: {$userId}";
 ```
 
 ### Batch Operations
 
 ```php
-// Process all users in batches
 $pageNumber = 0;
-$pageSize = 100;
 
 do {
-    $result = app('earhart')->queryUsers(
-        pageNumber: $pageNumber,
-        pageSize: $pageSize
-    );
+    $result = app('earhart')->queryUsers(pageNumber: $pageNumber, pageSize: 100);
     
     foreach ($result->items as $userData) {
         $user = \LittleGreenMan\Earhart\PropelAuth\UserData::fromArray($userData);
         
-        // Process each user
         \App\Models\User::updateOrCreate(
             ['propel_id' => $user->user_id],
-            [
-                'email' => $user->email,
-                'name' => "{$user->first_name} {$user->last_name}",
-            ]
+            ['email' => $user->email, 'name' => "{$user->first_name} {$user->last_name}"]
         );
     }
     
@@ -844,7 +876,7 @@ do {
 } while ($result->hasNextPage());
 ```
 
-### Handling Organization Webhooks
+### Handling Organisation Webhooks
 
 ```php
 namespace App\Listeners;
@@ -856,10 +888,8 @@ class SyncOrganisationListener
 {
     public function handle(OrgCreated $event): void
     {
-        // Fetch full org details from API
         $orgData = app('earhart')->organisations()->getOrganisation($event->org_id);
         
-        // Create or update local organization
         Organisation::updateOrCreate(
             ['propel_id' => $orgData->orgId],
             [
@@ -869,13 +899,6 @@ class SyncOrganisationListener
                 'created_at' => $orgData->createdAt,
             ]
         );
-        
-        // Fetch and sync organization members
-        $members = app('earhart')->organisations()->getOrganisationUsers($event->org_id);
-        
-        foreach ($members->items as $userData) {
-            // Sync members to your local database
-        }
     }
 }
 ```
@@ -913,20 +936,13 @@ $tier = PropelAuthHelper::getUserProperty('user_id', 'subscription_tier', 'free'
 // In App\Console\Kernel
 protected function schedule(Schedule $schedule)
 {
-    // Sync PropelAuth users daily
     $schedule->call(function () {
-        $result = app('earhart')->queryUsers(pageSize: 1000);
-        
-        foreach ($result->allPages() as $userData) {
+        foreach (app('earhart')->queryUsers(pageSize: 1000)->allPages() as $userData) {
             $user = \LittleGreenMan\Earhart\PropelAuth\UserData::fromArray($userData);
             
             \App\Models\User::updateOrCreate(
                 ['propel_id' => $user->user_id],
-                [
-                    'email' => $user->email,
-                    'name' => "{$user->first_name} {$user->last_name}",
-                    'email_verified_at' => $user->email_confirmed ? now() : null,
-                ]
+                ['email' => $user->email, 'name' => "{$user->first_name} {$user->last_name}"]
             );
         }
     })->daily();
@@ -935,34 +951,26 @@ protected function schedule(Schedule $schedule)
 
 ## Best Practices
 
-1. **Use Caching**: Enable caching to reduce API calls and improve performance.
-
-2. **Handle Errors Gracefully**: Always wrap API calls in try-catch blocks.
-
-3. **Leverage Webhooks**: Use webhooks for real-time updates instead of polling the API.
-
-4. **Batch Operations**: When processing many items, use pagination efficiently.
-
-5. **Cache Invalidation**: Invalidate cache when data changes via webhooks.
-
-6. **Fresh Data When Critical**: Use `fresh: true` parameter for critical operations where stale data could cause issues.
-
-7. **Rate Limiting**: Implement exponential backoff when handling `RateLimitException`.
-
-8. **Security**: Never expose your API key in client-side code or logs.
+1. **Enable caching** to reduce API calls and improve performance
+2. **Always wrap API calls** in try-catch blocks for graceful error handling
+3. **Use webhooks** for real-time updates instead of polling the API
+4. **Invalidate cache** when data changes via webhooks
+5. **Use `fresh: true`** for critical operations where stale data could cause issues
+6. **Implement exponential backoff** when handling rate limit exceptions
+7. **Never expose your API key** in client-side code or logs
 
 ## Missing Features & Limitations
 
-While Earhart provides a solid PropelAuth integration, some API features are not yet implemented:
+Some PropelAuth API features aren't yet implemented in Earhart:
 
 ### User API Limitations
 
-1. **Isolated Org Support**: The `isolatedOrgId` parameter is not supported in:
+1. **Isolated Org Support**: The `isolatedOrgId` parameter isn't supported in:
    - `getUserByEmail()`
    - `getUserByUsername()`
    - `queryUsers()`
 
-2. **Legacy User ID Filtering**: `queryUsers()` doesn't support filtering by `legacyUserId`
+2. **Legacy User ID Filtering**: `queryUsers()` doesn't support `legacyUserId` filtering
 
 3. **Create User Options**: Missing parameters:
    - `ignoreDomainRestrictions`
@@ -975,7 +983,7 @@ While Earhart provides a solid PropelAuth integration, some API features are not
 5. **OAuth Tokens**: Cannot fetch OAuth tokens from social login providers
    - Missing: Fetch user OAuth tokens endpoint
 
-### Organization API Limitations
+### Organisation API Limitations
 
 1. **Create Organization**: Missing parameters:
    - `domain`
@@ -1011,9 +1019,9 @@ While Earhart provides a solid PropelAuth integration, some API features are not
 
 ### API Key Management (Not Implemented)
 
-The entire API Key management system for end-user/M2M keys is not yet implemented:
+> **API Reference**: [API Key Reference](https://docs.propelauth.com/reference/api/apikey)
 
-**Missing Endpoints:**
+The entire API Key management system for end-user/M2M keys isn't yet implemented:
 - `validateApiKey()` - Validate user/org API keys
 - `validatePersonalApiKey()` - Validate personal API keys
 - `validateOrgApiKey()` - Validate organization API keys
@@ -1027,18 +1035,18 @@ The entire API Key management system for end-user/M2M keys is not yet implemente
 - `importApiKey()` - Import API keys from external systems
 - `validateImportedApiKey()` - Validate imported API keys
 
-**Note**: These are separate from your PropelAuth API Key used for backend integration. These endpoints manage API keys that your end users create.
+**Note**: These are separate from your PropelAuth API key used for backend integration. These endpoints manage API keys created by your end users.
 
 ### Social Login & OAuth
 
-Not implemented:
+Not yet implemented:
 - Social login redirect URL generation
 - Social account linking
-- Fetching OAuth tokens from providers (Google, GitHub, etc.)
+- Fetching OAuth tokens from providers
 
 ### Workarounds
 
-For missing features, you can make direct HTTP requests:
+For missing features, make direct HTTP requests to the PropelAuth API:
 
 ```php
 use Illuminate\Support\Facades\Http;
@@ -1058,12 +1066,12 @@ $orgId = $response->json()['orgId'];
 
 ### Feature Requests
 
-If you need any of these features, please:
+If you need any of these features:
 1. Open an issue on the [GitHub repository](https://github.com/little-green-man/earhart)
-2. Submit a pull request implementing the feature
-3. Contact the maintainers for prioritization
+2. Submit a pull request
+3. Contact the maintainers
 
-For more information, see:
+**See also**:
 - [README.md](../README.md) - Installation and setup
 - [PropelAuth API Documentation](https://docs.propelauth.com/reference/api/getting-started)
 - [REFRESHING_USER_TOKENS.md](./REFRESHING_USER_TOKENS.md) - Token refresh guide

@@ -7,32 +7,30 @@ Primarily it helps your app use PropelAuth's OAuth flow to log users in via Soci
 ## Features
 
 * **Authentication**: Socialite integration with easy route controllers for PropelAuth OAuth
-* **Webhooks**: Webhook handler that fires events you can listen for in your application
-* **Signature Verification**: Secure webhook signature verification using Svix (v1.4+)
+* **Secure Webhook Handling that drives Events**: Verified webhooks fire events you can listen for in your application when e.g. user details change at PropelAuth
+* **API Integration**: Built-in PropelAuth API client for querying data and to build functionality into your app seamlessly.
 * **Configuration**: Flexible webhook configuration with cache invalidation rules (v1.4+)
-* **Events**: Comprehensive event system for all PropelAuth events
-* **API Integration**: Built-in PropelAuth API client for querying organizations and users
 
 ## Installation
 
-### 1. Configure PropelAuth as follows:
-
-   * General settings e.g. password
-   * Enable the following User properties (default settings are ok)
-     * Name
-     * Profile Picture
-     * Terms of Service
-   * Org settings
-   * Webhook settings
-     * Integration > Svix > check all and set test and prod URLs to `https://{your_dev/prod_app_url}/auth/webhooks`
-
-### 2. Install the package via composer:
+### 1. Install the package via composer:
 
 ```bash
 composer require little-green-man/earhart
 ```
 
-### 3. Set your environment variables:
+### 2. Configure PropelAuth
+
+In your PropelAuth dashboard:
+   * Configure general settings (e.g. password requirements)
+   * Enable these User properties (default settings are fine):
+     * Name
+     * Profile Picture
+     * Terms of Service
+   * Configure organisation settings as needed
+   * Set webhook URLs: Integration > Svix > tick all events and set test and prod URLs to `https://{your_app_url}/auth/webhooks`
+
+### 3. Set environment variables:
 
 ```dotenv
 PROPELAUTH_CLIENT_ID="tbc"
@@ -45,11 +43,9 @@ PROPELAUTH_CACHE_ENABLED=false
 PROPELAUTH_CACHE_TTL=60
 ```
 
-### 4. Configure the package:
+### 4. Configure services
 
-After publishing the config file (optional but recommended), Earhart automatically merges environment variables into the `config/earhart.php` configuration. These are Earhart-specific variables.
-
-To remain compatible with Socialite, some configuration keys must be set in the `config/services.php` file, as shown below:
+Add PropelAuth configuration to `config/services.php`:
 
 ```php
 'propelauth' => [
@@ -62,40 +58,28 @@ To remain compatible with Socialite, some configuration keys must be set in the 
 ],
 ```
 
-**Environment Variable Mapping:**
-
-| Environment Variable | Config Key | Purpose |
-|---|---|---|
-| `PROPELAUTH_CLIENT_ID` | `services.propelauth.client_id` | OAuth2 Client ID |
-| `PROPELAUTH_CLIENT_SECRET` | `services.propelauth.client_secret` | OAuth2 Client Secret |
-| `PROPELAUTH_AUTH_URL` | `services.propelauth.auth_url` | PropelAuth Auth URL (e.g., `https://your-org.propelauthtest.com`) |
-| `PROPELAUTH_CALLBACK_URL` | `services.propelauth.redirect_url` | OAuth2 Callback URL |
-| `PROPELAUTH_API_KEY` | `services.propelauth.api_key` | PropelAuth API Key for backend requests |
-| `PROPELAUTH_SVIX_SECRET` | `services.propelauth.svix_secret` | Svix Webhook Signing Secret |
-| `PROPELAUTH_CACHE_ENABLED` | `earhart.cache.enabled` | Enable caching (boolean) |
-| `PROPELAUTH_CACHE_TTL` | `earhart.cache.ttl_minutes` | Cache TTL in minutes (default: 60) |
-
-**Publishing the Earhart Config File (Optional):**
-
-To customize configuration, publish the config file:
+Optionally, publish Earhart's config file to customise caching and other settings:
 
 ```bash
 php artisan vendor:publish --provider="LittleGreenMan\Earhart\ServiceProvider" --tag="config"
 ```
 
-This creates `config/earhart.php` where you can customize default values.
+This creates `config/earhart.php` where you can customise default values.
 
-### 5. Prepare your database:
+### 5. Update your database
 
-* Add string `propel_id` to your User model.
-* Add string `propel_access_token` to your User model.
-* Add string `propel_refresh_token` to your User model.
-* Remove or make nullable the `password` field from your User model.
-* Add string `avatar` to your User model.
-* Add json `data` to your User model.
-* Add any Teams models/relations you need
+Add these fields to your User model/migration:
+* `propel_id` (string)
+* `propel_access_token` (string)
+* `propel_refresh_token` (string)
+* `avatar` (string)
+* `data` (json)
+* Make `password` nullable or remove it
+* Add any organisation/team models and relations you need
 
-### 6. Add the webhook route to your web.php routes file:
+### 6. Add authentication routes
+
+Add the webhook route to `routes/web.php`:
 
 ```php
 Route::post('/auth/webhooks', AuthWebhookController::class)
@@ -104,9 +88,7 @@ Route::post('/auth/webhooks', AuthWebhookController::class)
     ->name('auth.webhook');
 ```
 
-### 7. Set up authentication routes:
-
-Add the following to your web.php routes file:
+Add the OAuth callback and logout routes to `routes/web.php`:
 
 ```php
 use App\Models\User;
@@ -158,9 +140,9 @@ Route::get('/auth/logout', function(Request $request){
 })->name('auth.logout');
 ```
 
-### 8. Add the Socialite event listener:
+### 7. Register the Socialite provider
 
-Add it to the `boot` method of your `AppServiceProvider`.
+Add this to the `boot` method of your `AppServiceProvider`:
 
 ```php
 use Illuminate\Support\Facades\Event;
@@ -171,14 +153,14 @@ Event::listen(function (SocialiteWasCalled $event) {
 });
 ```
 
-### 8. Add login / logout buttons to your views:
+### 8. Add authentication links to your views:
 
 ```blade
 <a href="{{ route('auth.redirect') }}">Login</a>
 <a href="{{ route('auth.logout') }}">Logout</a>
 ```
 
-And optionally the following, which redirect to the relevant sections in PropelAuth:
+Optionally, add links to PropelAuth's hosted pages:
 
 ```blade
 <a href="{{ route('auth.account') }}">Account</a>
@@ -188,13 +170,13 @@ And optionally the following, which redirect to the relevant sections in PropelA
 <a href="{{ route('auth.org.settings') }}">Organisation Settings</a>
 ```
 
-You can alternatively implement these features in your own application via integrations that Earhart provides.
+Alternatively, implement these features in your own application using Earhart's API integrations.
 
 ## Refreshing User Tokens
 
 PropelAuth access tokens expire after 30 minutes. To keep user tokens fresh and prevent authentication failures, you should set up a scheduled job to refresh them automatically.
 
-See [docs/REFRESHING_USER_TOKENS.md](docs/REFRESHING_USER_TOKENS.md) for a complete, production-ready example job and setup instructions.
+See [docs/REFRESHING_USER_TOKENS.md](docs/REFRESHING_USER_TOKENS.md) for implementation details.
 
 ## Registered Routes
 
@@ -209,7 +191,7 @@ The following routes are registered automatically:
 
 ## Webhook Events
 
-Set up listeners in your app for the following events:
+Create listeners in your application for these events:
 
 ### Organization Events
 
@@ -268,7 +250,7 @@ class PropelAuthOrgCreatedListener
 
 ## PropelAuth API Usage
 
-Within your app, you can use the following code to interrogate the PropelAuth API, for example in response to an event:
+Use the PropelAuth API within your application:
 
 ```php
 $orgs = app('earhart')->getOrganisations();
@@ -276,13 +258,13 @@ $org = app('earhart')->getOrganisation('org_uuid');
 $users = app('earhart')->getUsersInOrganisation('org_uuid');
 ```
 
-See [USING_PROPEL_API](docs/USING_PROPEL_API.md) for a full reference.
+See [USING_PROPEL_API.md](docs/USING_PROPEL_API.md) for complete API documentation.
 
-## Webhook Signature Verification (Optional)
+## Advanced Webhook Verification
 
-If you use the middleware in your webhook route, as shown above, your app will work fine and securely.
+The middleware shown in step 6 provides secure webhook verification out of the box.
 
-Starting with v1.4, Earhart includes more advanced webhook signature verification. If you need that level of control, check out [ADVANCED_WEBHOOK_VERIFICATION.md](docs/ADVANCED_WEBHOOK_VERIFICATION.md).
+For advanced webhook signature verification options (v1.4+), see [ADVANCED_WEBHOOK_VERIFICATION.md](docs/ADVANCED_WEBHOOK_VERIFICATION.md).
 
 ## Package Testing
 
