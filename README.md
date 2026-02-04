@@ -1,3 +1,5 @@
+<p align="center"><a href="https://github.com/little-green-man/earhart" target="_blank"><img src="docs/earhart.png" width="400"></a></p>
+
 # Earhart
 
 A Laravel package that makes working with PropelAuth easier.
