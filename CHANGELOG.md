@@ -2,6 +2,12 @@
 
 All notable changes to `earhart` will be documented in this file.
 
+## [2.1.1] - 2026-09-28
+
+### Removed
+
+- Laravel 11 support. Laravel 11 is end-of-life and every 11.x release has unpatched security advisories, so Composer no longer installs it by default. Apps on Laravel 11 can stay on 2.1.0
+
 ## [2.1.0] - 2026-09-28
 
 ### Added
