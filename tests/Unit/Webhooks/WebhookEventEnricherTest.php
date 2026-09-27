@@ -12,15 +12,16 @@ use LittleGreenMan\Earhart\Services\UserService;
 use LittleGreenMan\Earhart\Tests\TestCase;
 use LittleGreenMan\Earhart\Webhooks\WebhookEventEnricher;
 use Mockery;
+use Mockery\MockInterface;
 
 class WebhookEventEnricherTest extends TestCase
 {
     private WebhookEventEnricher $enricher;
 
-    /** @var UserService&\Mockery\MockInterface */
+    /** @var UserService&MockInterface */
     private UserService $userService;
 
-    /** @var OrganisationService&\Mockery\MockInterface */
+    /** @var OrganisationService&MockInterface */
     private OrganisationService $orgService;
 
     protected function setUp(): void

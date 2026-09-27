@@ -2,6 +2,7 @@
 
 namespace LittleGreenMan\Earhart\Tests\Unit\PropelAuth;
 
+use Illuminate\Support\Collection;
 use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
 
 describe('PaginatedResult', function () {
@@ -167,7 +168,7 @@ describe('PaginatedResult', function () {
         $collection = $result->collection();
 
         expect($collection)
-            ->toBeInstanceOf(\Illuminate\Support\Collection::class)
+            ->toBeInstanceOf(Collection::class)
             ->and($collection->toArray())
             ->toBe($items);
     });

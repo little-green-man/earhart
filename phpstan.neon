@@ -13,15 +13,6 @@ parameters:
             message: '#Call to an undefined method Pest\\PendingCalls\\TestCall::expect\(\)#'
             path: tests/ArchTest.php
 
-        # Mockery mock method calls in Pest tests and PHPUnit tests
-        -
-            message: '#Call to an undefined method Mockery\\ExpectationInterface\|Mockery\\HigherOrderMessage::(with|andReturn|andThrow|times|zeroOrMoreTimes)\(\)#'
-            paths:
-                - tests/Unit/Middleware/VerifyPropelAuthUserTest.php
-                - tests/Unit/Webhooks/WebhookCacheInvalidatorTest.php
-                - tests/Unit/Query/QueryBuilderTest.php
-                - tests/Unit/Webhooks/WebhookEventEnricherTest.php
-
         # Test closure type hints for PaginatedResult - these are dummy callbacks
         -
             message: '#Parameter (\$fetchNextPage|\#2 \$fetchNext) .* expects Closure\(int\): LittleGreenMan\\Earhart\\PropelAuth\\PaginatedResult, Closure\((mixed|)\): null given#'
@@ -44,5 +35,5 @@ parameters:
 
         # Pest test dynamic property access in CaseConversionTest
         -
-            message: '#Access to an undefined property PHPUnit\\Framework\\TestCase::\$service#'
+            message: '#Access to an undefined property (PHPUnit\\Framework\\TestCase|Pest\\PendingCalls\\TestCall)::\$service#'
             path: tests/Unit/CaseConversionTest.php

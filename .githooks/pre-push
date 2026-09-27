@@ -70,7 +70,7 @@ while read local_ref local_sha remote_ref remote_sha; do
 
     # Run static analysis
     echo "📊 Running Larastan (static analysis)..."
-    if ! ./vendor/bin/phpstan analyse --quiet; then
+    if ! ./vendor/bin/phpstan analyse --memory-limit=1G --quiet; then
       echo "❌ Static analysis failed!"
       exit 1
     fi

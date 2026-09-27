@@ -28,8 +28,8 @@ class ServiceProvider extends BaseServiceProvider
         // Register CacheService
         $this->app->singleton(CacheService::class, function ($app) {
             return new CacheService(
-                enabled: (bool) config('services.propelauth.cache.enabled', false),
-                ttlMinutes: (int) config('services.propelauth.cache.ttl_minutes', 60),
+                enabled: $this->cacheEnabled(),
+                ttlMinutes: $this->cacheTtlMinutes(),
             );
         });
 
@@ -60,12 +60,31 @@ class ServiceProvider extends BaseServiceProvider
                 authUrl: (string) config('services.propelauth.auth_url'),
                 svixSecret: (string) config('services.propelauth.svix_secret'),
                 apiKey: (string) config('services.propelauth.api_key'),
-                enableCache: (bool) config('services.propelauth.cache.enabled', false),
-                cacheTtlMinutes: (int) config('services.propelauth.cache.ttl_minutes', 60),
+                enableCache: $this->cacheEnabled(),
+                cacheTtlMinutes: $this->cacheTtlMinutes(),
             );
         });
 
         $this->app->alias('earhart', Earhart::class);
+    }
+
+    /**
+     * Cache settings default to config/earhart.php. A value set under
+     * services.propelauth.cache (the pre-2.1 location) takes precedence.
+     */
+    private function cacheConfig(string $key, mixed $default): mixed
+    {
+        return config("services.propelauth.cache.{$key}") ?? config("earhart.cache.{$key}", $default);
+    }
+
+    private function cacheEnabled(): bool
+    {
+        return (bool) $this->cacheConfig('enabled', false);
+    }
+
+    private function cacheTtlMinutes(): int
+    {
+        return (int) $this->cacheConfig('ttl_minutes', 60);
     }
 
     /**
@@ -85,16 +104,15 @@ class ServiceProvider extends BaseServiceProvider
             'auth_url' => 'PropelAuth Auth URL',
             'client_id' => 'PropelAuth Client ID',
             'client_secret' => 'PropelAuth Client Secret',
-            'svix_secret' => 'PropelAuth Webhook Secret',
         ];
 
         foreach ($requiredKeys as $key => $label) {
-            $value = config("earhart.{$key}");
+            $value = config("services.propelauth.{$key}");
             if (! $value) {
                 $envKey = strtoupper($key);
                 throw new \RuntimeException(
                     "{$label} is not configured. "
-                    ."Please set PROPELAUTH_{$envKey} environment variable or configure earhart.{$key} in config/earhart.php",
+                    ."Please set the PROPELAUTH_{$envKey} environment variable and configure services.propelauth.{$key} in config/services.php",
                 );
             }
         }

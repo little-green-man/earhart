@@ -18,12 +18,13 @@ use LittleGreenMan\Earhart\Services\CacheService;
 use LittleGreenMan\Earhart\Tests\TestCase;
 use LittleGreenMan\Earhart\Webhooks\WebhookCacheInvalidator;
 use Mockery;
+use Mockery\MockInterface;
 
 class WebhookCacheInvalidatorTest extends TestCase
 {
     private WebhookCacheInvalidator $invalidator;
 
-    /** @var CacheService&\Mockery\MockInterface */
+    /** @var CacheService&MockInterface */
     private CacheService $cacheService;
 
     protected function setUp(): void

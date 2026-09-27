@@ -8,13 +8,14 @@ use LittleGreenMan\Earhart\Services\OrganisationService;
 use LittleGreenMan\Earhart\Services\UserService;
 use LittleGreenMan\Earhart\Tests\TestCase;
 use Mockery;
+use Mockery\MockInterface;
 
 class QueryBuilderTest extends TestCase
 {
-    /** @var UserService&\Mockery\MockInterface */
+    /** @var UserService&MockInterface */
     private UserService $userService;
 
-    /** @var OrganisationService&\Mockery\MockInterface */
+    /** @var OrganisationService&MockInterface */
     private OrganisationService $orgService;
 
     protected function setUp(): void

@@ -9,6 +9,7 @@ use LittleGreenMan\Earhart\Tests\TestCase;
 use LittleGreenMan\Earhart\Webhooks\WebhookConfig;
 use LittleGreenMan\Earhart\Webhooks\WebhookEventParser;
 use LittleGreenMan\Earhart\Webhooks\WebhookSignatureVerifier;
+use Svix\Exception\WebhookVerificationException;
 use Svix\Webhook;
 
 /**
@@ -74,7 +75,7 @@ class WebhookSignatureAndParsingTest extends TestCase
             'svix-signature' => $msgSignature,
         ];
 
-        $this->expectException(\Svix\Exception\WebhookVerificationException::class);
+        $this->expectException(WebhookVerificationException::class);
         $verifier->verify($tamperedPayload, $headers);
     }
 
@@ -98,7 +99,7 @@ class WebhookSignatureAndParsingTest extends TestCase
             'svix-signature' => $msgSignature,
         ];
 
-        $this->expectException(\Svix\Exception\WebhookVerificationException::class);
+        $this->expectException(WebhookVerificationException::class);
         $verifier->verify($payload, $headers);
     }
 

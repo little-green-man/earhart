@@ -8,6 +8,9 @@ use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
 use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\Exceptions\RateLimitException;
 use LittleGreenMan\Earhart\Exceptions\ValidationException;
+use LittleGreenMan\Earhart\Tests\TestCase;
+
+uses(TestCase::class);
 
 describe('PropelAuthException', function () {
     test('creates exception with message and status code', function () {
@@ -45,9 +48,7 @@ describe('PropelAuthException', function () {
             }));
 
         $exception->report();
-
-        expect(true)->toBeTrue();
-    })->skip('Log facade binding issue in full test suite - implementation detail');
+    });
 
     test('can chain with previous exception', function () {
         $previous = new \Exception('Previous error');

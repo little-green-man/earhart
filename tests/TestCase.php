@@ -2,7 +2,9 @@
 
 namespace LittleGreenMan\Earhart\Tests;
 
+use Illuminate\Support\Sleep;
 use LittleGreenMan\Earhart\ServiceProvider;
+use Monolog\Handler\NullHandler;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 class TestCase extends Orchestra
@@ -10,6 +12,9 @@ class TestCase extends Orchestra
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Skip real retry back-off delays
+        Sleep::fake();
     }
 
     protected function getPackageProviders($app)
@@ -21,25 +26,15 @@ class TestCase extends Orchestra
 
     protected function getEnvironmentSetUp($app)
     {
-        // Set up test configuration (both earhart.* and services.propelauth.* for compatibility)
-        $app['config']->set('earhart.api_key', 'test-api-key');
-        $app['config']->set('earhart.auth_url', 'https://auth.example.com');
-        $app['config']->set('earhart.client_id', 'test-client-id');
-        $app['config']->set('earhart.client_secret', 'test-client-secret');
-        $app['config']->set('earhart.redirect_url', 'https://app.example.com/callback');
-        $app['config']->set('earhart.svix_secret', 'test-svix-secret');
-        $app['config']->set('earhart.cache.enabled', false);
-        $app['config']->set('earhart.cache.ttl_minutes', 60);
-
-        // Also set services.propelauth.* as ServiceProvider uses these for service registration
+        // PropelAuth credentials live in services.propelauth; package settings in earhart
         $app['config']->set('services.propelauth.api_key', 'test-api-key');
         $app['config']->set('services.propelauth.auth_url', 'https://auth.example.com');
         $app['config']->set('services.propelauth.client_id', 'test-client-id');
         $app['config']->set('services.propelauth.client_secret', 'test-client-secret');
-        $app['config']->set('services.propelauth.redirect_url', 'https://app.example.com/callback');
+        $app['config']->set('services.propelauth.redirect', 'https://app.example.com/callback');
         $app['config']->set('services.propelauth.svix_secret', 'test-svix-secret');
-        $app['config']->set('services.propelauth.cache.enabled', false);
-        $app['config']->set('services.propelauth.cache.ttl_minutes', 60);
+        $app['config']->set('earhart.cache.enabled', false);
+        $app['config']->set('earhart.cache.ttl_minutes', 60);
 
         // Set up cache configuration for testing
         $app['config']->set('cache.default', 'array');
@@ -61,7 +56,7 @@ class TestCase extends Orchestra
         $app['config']->set('logging.default', 'null');
         $app['config']->set('logging.channels.null', [
             'driver' => 'monolog',
-            'handler' => \Monolog\Handler\NullHandler::class,
+            'handler' => NullHandler::class,
         ]);
         $app['config']->set('broadcasting.default', 'null');
         $app['config']->set('app.debug', false);

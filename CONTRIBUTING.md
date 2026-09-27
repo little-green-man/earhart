@@ -10,8 +10,8 @@ Be respectful, inclusive, and constructive in all interactions. We're building a
 
 ### Prerequisites
 
-- PHP 8.2 or higher
-- Laravel 10.x or 11.x
+- PHP 8.3 or higher
+- Laravel 11.x, 12.x or 13.x
 - Composer
 - Git
 
@@ -240,7 +240,8 @@ TypeError when API returns unexpected response structure.
 
 1. **Before pushing:**
    - Run tests: `./vendor/bin/pest`
-   - Check code style: `./vendor/bin/pint --test` (if available)
+   - Check code style: `composer lint` (fix with `composer lint:fix`)
+   - Run static analysis: `composer analyse`
    - Update CHANGELOG.md
    - Add/update documentation
 
@@ -415,9 +416,9 @@ verification throws a WebhookVerificationException.
 2. Signature verification should pass but fails
 
 ### Environment
-- PHP 8.2
-- Laravel 11
-- Earhart 1.4.0
+- PHP 8.4
+- Laravel 13
+- Earhart 2.0.0
 
 ### Error
 ```

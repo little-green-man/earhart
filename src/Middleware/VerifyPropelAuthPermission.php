@@ -15,7 +15,7 @@ class VerifyPropelAuthPermission
      * Verifies that the authenticated user has the required role/permission
      * within the specified organisation.
      *
-     * @param  \Closure(Request): (SymfonyResponse)  $next
+     * @param  Closure(Request): (SymfonyResponse)  $next
      */
     public function handle(Request $request, Closure $next, string $requiredRole): SymfonyResponse
     {

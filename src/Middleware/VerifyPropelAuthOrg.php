@@ -21,7 +21,7 @@ class VerifyPropelAuthOrg
      * Verifies that the authenticated user belongs to the specified organisation.
      * The organisation ID should be passed as a route parameter (e.g., 'org_id' or 'orgId').
      *
-     * @param  \Closure(Request): (SymfonyResponse)  $next
+     * @param  Closure(Request): (SymfonyResponse)  $next
      */
     public function handle(Request $request, Closure $next, ?string $orgParameter = 'org_id'): SymfonyResponse
     {

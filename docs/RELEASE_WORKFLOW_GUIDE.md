@@ -211,9 +211,9 @@ The hook failed because a check didn't pass. Examples:
 
 **Tests failed**: Run `./vendor/bin/pest` to debug, fix issues, commit, recreate tag
 
-**Code style issues**: Run `./vendor/bin/pint --fix` to auto-fix, commit, recreate tag
+**Code style issues**: Run `composer lint:fix` to auto-fix, commit, recreate tag
 
-**Static analysis failed**: Run `./vendor/bin/phpstan analyse` to debug, fix, commit, recreate tag
+**Static analysis failed**: Run `composer analyse` to debug, fix, commit, recreate tag
 
 ### Git Hook Not Running
 

@@ -42,7 +42,7 @@ Make sure your code is ready by running the full test suite locally:
 
 ```shell
 ./vendor/bin/pest              # Run tests
-./vendor/bin/phpstan analyse   # Static analysis
+./vendor/bin/phpstan analyse --memory-limit=1G   # Static analysis
 ./vendor/bin/pint --test       # Code style check
 ```
 
@@ -121,7 +121,7 @@ The hook prevents pushing if tests fail. Fix the issues:
 # Fix the failing code
 # Then run checks locally to verify
 ./vendor/bin/pest
-./vendor/bin/phpstan analyse
+./vendor/bin/phpstan analyse --memory-limit=1G
 ./vendor/bin/pint --test
 
 # Delete and recreate the tag

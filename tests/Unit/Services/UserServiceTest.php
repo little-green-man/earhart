@@ -3,6 +3,7 @@
 namespace LittleGreenMan\Earhart\Tests\Unit\Services;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
 use LittleGreenMan\Earhart\Exceptions\RateLimitException;
 use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
@@ -576,13 +577,12 @@ describe('UserService', function () {
             ]);
 
             $service = createUserService();
-            // This should retry and eventually succeed (but may timeout in test)
-            // For now just verify the exception is thrown
-            try {
-                $service->getUser('user123');
-            } catch (RateLimitException) {
-                expect(true)->toBeTrue();
-            }
+            $user = $service->getUser('user123');
+
+            expect($user)->not->toBeNull()
+                ->and($callCount)->toBe(2);
+
+            Sleep::assertSleptTimes(1);
         });
     });
 

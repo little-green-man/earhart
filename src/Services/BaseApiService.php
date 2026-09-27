@@ -3,6 +3,7 @@
 namespace LittleGreenMan\Earhart\Services;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use LittleGreenMan\Earhart\Exceptions\RateLimitException;
 
 /**
@@ -203,7 +204,7 @@ abstract class BaseApiService
                 // Exponential backoff with jitter
                 $delay = $this->initialRetryDelay * (2 ** $attempt);
                 $jitter = random_int(0, (int) ($delay * 0.1));
-                sleep($delay + $jitter);
+                Sleep::for($delay + $jitter)->seconds();
             }
         }
 

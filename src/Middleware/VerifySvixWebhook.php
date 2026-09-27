@@ -13,7 +13,7 @@ class VerifySvixWebhook
     /**
      * Handle an incoming request.
      *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * @param  Closure(Request): (Response)  $next
      *
      * @throws WebhookVerificationException
      */
@@ -25,7 +25,15 @@ class VerifySvixWebhook
             'svix-timestamp' => $request->headers->get('svix-timestamp'),
             'svix-signature' => $request->headers->get('svix-signature'),
         ];
-        $wh = new Webhook(config('services.propelauth.svix_secret'));
+        $secret = config('services.propelauth.svix_secret');
+        if (! $secret) {
+            throw new \RuntimeException(
+                'PropelAuth Webhook Secret is not configured. '
+                .'Please set the PROPELAUTH_SVIX_SECRET environment variable and configure services.propelauth.svix_secret in config/services.php',
+            );
+        }
+
+        $wh = new Webhook($secret);
         $wh->verify($payload, $headers); // returns json
 
         return $next($request);

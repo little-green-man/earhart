@@ -18,7 +18,7 @@ class VerifyPropelAuthUser
     /**
      * Handle an incoming request.
      *
-     * @param  \Closure(Request): (SymfonyResponse)  $next
+     * @param  Closure(Request): (SymfonyResponse)  $next
      */
     public function handle(Request $request, Closure $next): SymfonyResponse
     {

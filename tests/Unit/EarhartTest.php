@@ -7,6 +7,9 @@ use LittleGreenMan\Earhart\Earhart;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationData;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationsData;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
+use LittleGreenMan\Earhart\Services\CacheService;
+use LittleGreenMan\Earhart\Services\OrganisationService;
+use LittleGreenMan\Earhart\Services\UserService;
 use LittleGreenMan\Earhart\Tests\TestCase;
 
 uses(TestCase::class);
@@ -203,20 +206,20 @@ describe('Earhart', function () {
         test('users() returns UserService', function () {
             $earhart = createEarhart();
 
-            expect($earhart->users())->toBeInstanceOf(\LittleGreenMan\Earhart\Services\UserService::class);
+            expect($earhart->users())->toBeInstanceOf(UserService::class);
         });
 
         test('organisations() returns OrganisationService', function () {
             $earhart = createEarhart();
 
             expect($earhart->organisations())
-                ->toBeInstanceOf(\LittleGreenMan\Earhart\Services\OrganisationService::class);
+                ->toBeInstanceOf(OrganisationService::class);
         });
 
         test('cache() returns CacheService', function () {
             $earhart = createEarhart();
 
-            expect($earhart->cache())->toBeInstanceOf(\LittleGreenMan\Earhart\Services\CacheService::class);
+            expect($earhart->cache())->toBeInstanceOf(CacheService::class);
         });
     });
 });

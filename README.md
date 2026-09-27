@@ -62,13 +62,13 @@ Add PropelAuth configuration to `config/services.php`:
 ],
 ```
 
-Optionally, publish Earhart's config file to customise caching and other settings:
+Optionally, publish Earhart's config file to customise caching:
 
 ```bash
 php artisan vendor:publish --provider="LittleGreenMan\Earhart\ServiceProvider" --tag="config"
 ```
 
-This creates `config/earhart.php` where you can customise default values.
+This creates `config/earhart.php` where you can customise cache defaults. Credentials always come from `services.propelauth`.
 
 ### 5. Update your database
 

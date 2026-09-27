@@ -2,6 +2,32 @@
 
 All notable changes to `earhart` will be documented in this file.
 
+## [2.1.0] - 2026-09-28
+
+### Added
+
+- Laravel 13 support (`illuminate/*` `^13.0`, `orchestra/testbench` `^11.0`)
+- Laravel 13 added to the CI test matrix
+
+### Changed
+
+- Updated PHPStan ignore rules and applied Pint fixes for the latest tooling versions
+- `config/earhart.php` now only holds cache settings; credentials are read solely from `services.propelauth`. Cache settings under `services.propelauth.cache` are still honoured
+- The webhook secret is no longer required at boot; `VerifySvixWebhook` throws a clear error if it is missing
+- Rate-limit retry back-off uses Laravel's `Sleep` helper so it can be faked in tests
+- Dropped unsupported dev constraints (Pest 1/2, Larastan 2); added `composer analyse`, `lint` and `lint:fix` scripts
+- PHPUnit config uses the installed schema and no longer writes coverage/JUnit reports on every run
+- CI caches Composer downloads instead of `vendor`; release workflow uses `softprops/action-gh-release@v2`
+- Renamed `UPGRADING.md` to `UPGRADE-1.7.md`
+
+### Fixed
+
+- Startup config validation checked `earhart.*` instead of `services.propelauth.*`, the keys the package actually uses
+- `PROPELAUTH_CACHE_*` values in `config/earhart.php` were ignored
+- `flushCache()` relied on cache tags, which failed on file/database stores and never cleared the untagged entries anyway; it now uses a key generation counter that works on every store
+- Example `config/services.php` used `redirect_url` instead of `redirect`
+- Unskipped the exception logging test and made the rate-limit retry test assert the retry
+
 ## [2.0.0] - 2025-01-31
 
 **MAJOR VERSION RELEASE** - Contains breaking changes. Please review the migration guide below.

@@ -47,17 +47,12 @@ describe('CacheService', function () {
         expect($result)->toBe('value');
     })->group('unit', 'fast');
 
-    test('get uses cache when enabled', function () {
+    test('get caches the value under a namespaced key when enabled', function () {
         $service = new CacheService(enabled: true, ttlMinutes: 60);
 
-        Cache::shouldReceive('remember')
-            ->once()
-            ->with('propelauth.test-key', 3600, \Mockery::any())
-            ->andReturn('cached-value');
-
-        $result = $service->get('test-key', fn () => 'value');
-
-        expect($result)->toBe('cached-value');
+        expect($service->get('test-key', fn () => 'value'))->toBe('value')
+            ->and($service->get('test-key', fn () => 'other'))->toBe('value')
+            ->and(Cache::get('propelauth.test-key'))->toBe('value');
     })->group('unit', 'fast');
 
     test('forget returns true when cache is disabled', function () {
@@ -70,75 +65,71 @@ describe('CacheService', function () {
 
     test('forget deletes from cache when enabled', function () {
         $service = new CacheService(enabled: true);
+        $service->get('test-key', fn () => 'value');
 
-        Cache::shouldReceive('forget')
-            ->once()
-            ->with('propelauth.test-key')
-            ->andReturn(true);
-
-        $result = $service->forget('test-key');
-
-        expect($result)->toBeTrue();
+        expect($service->forget('test-key'))->toBeTrue()
+            ->and(Cache::has('propelauth.test-key'))->toBeFalse();
     })->group('unit', 'fast');
 
     test('flush does nothing when cache is disabled', function () {
         $service = new CacheService(enabled: false);
 
-        // Should not call Cache methods
         $service->flush();
 
-        expect(true)->toBeTrue();
+        expect(Cache::has('propelauth.generation'))->toBeFalse();
     })->group('unit', 'fast');
 
-    test('flush clears all propelauth cache when enabled', function () {
+    test('flush invalidates all propelauth cache when enabled', function () {
         $service = new CacheService(enabled: true);
-
-        Cache::shouldReceive('tags')
-            ->once()
-            ->with(['propelauth'])
-            ->andReturnSelf();
-
-        Cache::shouldReceive('flush')->once();
+        $service->get('user.user123', fn () => 'old');
+        $service->get('org.org456', fn () => 'old');
 
         $service->flush();
 
-        expect(true)->toBeTrue();
+        expect($service->get('user.user123', fn () => 'new'))->toBe('new')
+            ->and($service->get('org.org456', fn () => 'new'))->toBe('new');
+    })->group('unit', 'fast');
+
+    test('flush works on stores without tag support', function () {
+        config()->set('cache.default', 'file');
+        $service = new CacheService(enabled: true);
+        $service->get('user.user123', fn () => 'old');
+
+        $service->flush();
+
+        expect($service->get('user.user123', fn () => 'new'))->toBe('new');
+
+        Cache::flush();
+    })->group('unit', 'fast');
+
+    test('keys written after a flush can still be forgotten', function () {
+        $service = new CacheService(enabled: true);
+        $service->flush();
+        $service->get('user.user123', fn () => 'value');
+
+        $service->invalidateUser('user123');
+
+        expect($service->get('user.user123', fn () => 'fresh'))->toBe('fresh');
     })->group('unit', 'fast');
 
     test('invalidateUser forgets user cache key', function () {
         $service = new CacheService(enabled: true);
-
-        Cache::shouldReceive('forget')
-            ->once()
-            ->with('propelauth.user.user123')
-            ->andReturn(true);
+        $service->get('user.user123', fn () => 'value');
 
         $service->invalidateUser('user123');
 
-        expect(true)->toBeTrue();
+        expect(Cache::has('propelauth.user.user123'))->toBeFalse();
     })->group('unit', 'fast');
 
     test('invalidateOrganisation forgets organisation caches', function () {
         $service = new CacheService(enabled: true);
-
-        Cache::shouldReceive('forget')->twice()->andReturn(true);
+        $service->get('org.org456', fn () => 'value');
+        $service->get('org.org456.users', fn () => 'value');
 
         $service->invalidateOrganisation('org456');
 
-        expect(true)->toBeTrue();
-    })->group('unit', 'fast');
-
-    test('builds cache key with namespace', function () {
-        $service = new CacheService(enabled: true);
-
-        Cache::shouldReceive('remember')
-            ->once()
-            ->with('propelauth.custom-key', \Mockery::any(), \Mockery::any())
-            ->andReturn('value');
-
-        $result = $service->get('custom-key', fn () => 'value');
-
-        expect($result)->toBe('value');
+        expect(Cache::has('propelauth.org.org456'))->toBeFalse()
+            ->and(Cache::has('propelauth.org.org456.users'))->toBeFalse();
     })->group('unit', 'fast');
 
     test('default ttl is 60 minutes', function () {

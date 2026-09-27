@@ -6,6 +6,8 @@ use Illuminate\Support\Facades\Cache;
 
 class CacheService
 {
+    protected const GENERATION_KEY = 'propelauth.generation';
+
     protected int $ttlSeconds;
 
     protected bool $enabled;
@@ -44,11 +46,15 @@ class CacheService
 
     /**
      * Flush all PropelAuth cache.
+     *
+     * Bumps a generation counter that is part of every key, so existing
+     * entries are no longer read and expire via their TTL. Unlike cache tags,
+     * this works on every cache store.
      */
     public function flush(): void
     {
         if ($this->enabled) {
-            Cache::tags(['propelauth'])->flush();
+            Cache::forever(self::GENERATION_KEY, $this->generation() + 1);
         }
     }
 
@@ -90,6 +96,13 @@ class CacheService
      */
     protected function buildKey(string $key): string
     {
-        return "propelauth.{$key}";
+        $generation = $this->generation();
+
+        return $generation === 0 ? "propelauth.{$key}" : "propelauth.{$generation}.{$key}";
+    }
+
+    protected function generation(): int
+    {
+        return (int) Cache::get(self::GENERATION_KEY, 0);
     }
 }
