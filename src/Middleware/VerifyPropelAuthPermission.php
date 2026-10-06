@@ -42,96 +42,30 @@ class VerifyPropelAuthPermission
     }
 
     /**
-     * Check if user has the specified role in the organisation.
+     * Check if the user has the required role (or a role above it) in the organisation.
      *
-     * Supports role hierarchy:
-     * - owner: all permissions
-     * - admin: most permissions except org deletion
-     * - member: basic permissions
-     * - custom roles: exact match required
+     * Roles follow your PropelAuth role hierarchy, using the inherited roles
+     * PropelAuth returns: an Owner passes a check for Admin or Member. Prefix
+     * the argument with "permission:" to check a permission instead, e.g.
+     * `VerifyPropelAuthPermission::class.':permission:propelauth::can_invite'`.
      */
     protected function userHasRole(mixed $user, string $orgId, string $requiredRole): bool
     {
-        // Check if user has orgs property
-        if (! isset($user->orgs) || ! is_array($user->orgs)) {
+        if (! is_object($user) || ! method_exists($user, 'org')) {
             return false;
         }
 
-        // Find the user's role in this organisation
-        $userRole = null;
-        foreach ($user->orgs as $org) {
-            $currentOrgId = $this->extractOrgId($org);
-            if ($currentOrgId === $orgId) {
-                $userRole = $this->extractUserRole($org);
-                break;
-            }
-        }
+        $membership = $user->org($orgId);
 
-        if (! $userRole) {
+        if ($membership === null) {
             return false;
         }
 
-        // Check role hierarchy
-        return $this->roleHasPermission($userRole, $requiredRole);
-    }
-
-    /**
-     * Extract organisation ID from org object/array.
-     */
-    protected function extractOrgId(mixed $org): ?string
-    {
-        if (is_array($org)) {
-            return $org['id'] ?? $org['orgId'] ?? null;
-        }
-        if (is_object($org)) {
-            return $org->id ?? $org->orgId ?? null;
+        if (str_starts_with($requiredRole, 'permission:')) {
+            return $membership->hasPermission(substr($requiredRole, strlen('permission:')));
         }
 
-        return null;
-    }
-
-    /**
-     * Extract user's role from org object/array.
-     */
-    protected function extractUserRole(mixed $org): ?string
-    {
-        if (is_array($org)) {
-            return $org['user_role'] ?? $org['userRole'] ?? $org['role'] ?? null;
-        }
-        if (is_object($org)) {
-            return $org->user_role ?? $org->userRole ?? $org->role ?? null;
-        }
-
-        return null;
-    }
-
-    /**
-     * Check if a role has permission to fulfill a required role.
-     *
-     * Role hierarchy (higher roles include lower roles):
-     * - owner (highest)
-     * - admin
-     * - member (lowest)
-     */
-    protected function roleHasPermission(string $userRole, string $requiredRole): bool
-    {
-        $roleHierarchy = [
-            'owner' => 3,
-            'admin' => 2,
-            'member' => 1,
-        ];
-
-        // Get hierarchy values
-        $userRoleLevel = $roleHierarchy[strtolower($userRole)] ?? 0;
-        $requiredRoleLevel = $roleHierarchy[strtolower($requiredRole)] ?? 0;
-
-        // If it's a custom role or unknown, require exact match
-        if ($userRoleLevel === 0 || $requiredRoleLevel === 0) {
-            return strtolower($userRole) === strtolower($requiredRole);
-        }
-
-        // For standard roles, check hierarchy
-        return $userRoleLevel >= $requiredRoleLevel;
+        return $membership->isAtLeastRole($requiredRole);
     }
 
     /**

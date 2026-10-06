@@ -1,0 +1,19 @@
+{
+    "total_invites": 1,
+    "current_page": 0,
+    "page_size": 10,
+    "has_more_results": false,
+    "invites": [
+        {
+            "invitee_email": "paul@propelauth.com",
+            "org_id": "4896c602-7c67-4d32-a25d-5adb9a15a60e",
+            "org_name": "PropelAuth",
+            "role_in_org": "Owner",
+            "additional_roles_in_org": [],
+            "created_at": 1718648493,
+            "expires_at": 1719080493,
+            "inviter_email": null,
+            "inviter_user_id": null
+        }
+    ]
+}

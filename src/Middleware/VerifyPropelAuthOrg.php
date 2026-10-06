@@ -5,7 +5,6 @@ namespace LittleGreenMan\Earhart\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use LittleGreenMan\Earhart\Exceptions\InvalidOrgException;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
@@ -39,48 +38,25 @@ class VerifyPropelAuthOrg
             return $this->badRequest("Missing organisation parameter: {$orgParameter}");
         }
 
-        try {
-            // Verify user belongs to this organisation
-            if (! $this->userBelongsToOrg($user, $orgId)) {
-                return $this->forbidden("User does not belong to organisation {$orgId}");
-            }
-
-            // Store org ID in request for downstream use
-            $request->attributes->set('propelauth_org_id', $orgId);
-
-            return $next($request);
-        } catch (InvalidOrgException) {
-            return $this->notFound("Organisation not found: {$orgId}");
-        } catch (\Exception $e) {
-            return $this->serverError('Failed to verify organisation membership: '.$e->getMessage());
+        // Memberships come from the user, so this makes no API call
+        if (! $this->userBelongsToOrg($user, $orgId)) {
+            return $this->forbidden("User does not belong to organisation {$orgId}");
         }
+
+        // Store org ID in request for downstream use
+        $request->attributes->set('propelauth_org_id', $orgId);
+
+        return $next($request);
     }
 
     /**
      * Check if user belongs to the specified organisation.
+     *
+     * Works with UserData (fetched with memberships) and AccessToken.
      */
     protected function userBelongsToOrg(mixed $user, string $orgId): bool
     {
-        // Check if user has orgs property (from UserData)
-        if (! isset($user->orgs) || ! is_array($user->orgs)) {
-            return false;
-        }
-
-        // Look for matching org ID
-        foreach ($user->orgs as $org) {
-            if (is_array($org) && ($org['id'] ?? null) === $orgId) {
-                return true;
-            }
-            if (is_object($org) && ($org->id ?? null) === $orgId) {
-                return true;
-            }
-            // Skip string conversion attempt for arrays to avoid "Array to string conversion" error
-            if (is_string($org) && $org === $orgId) {
-                return true;
-            }
-        }
-
-        return false;
+        return is_object($user) && method_exists($user, 'isMemberOf') && $user->isMemberOf($orgId);
     }
 
     /**

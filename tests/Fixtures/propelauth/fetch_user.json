@@ -1,0 +1,22 @@
+{
+    "user_id": "a04d69d7-9347-48a3-aa01-8e7ce9aeee04",
+    "email": "test@propelauth.com",
+    "email_confirmed": false,
+    "has_password": true,
+    "username": "ant",
+    "first_name": "Anthony",
+    "last_name": "Edwards",
+    "picture_url": "https://img.propelauth.com/2a27d237-db8c-4f82-84fb-5824dfaedc87.png",
+    "properties": {
+        "favoriteSport": "basketball"
+    },
+    "metadata": null,
+    "locked": false,
+    "enabled": true,
+    "mfa_enabled": false,
+    "can_create_orgs": false,
+    "created_at": 1712770147,
+    "last_active_at": 1712770147,
+    "org_id_to_org_info": {},
+    "update_password_required": true
+}

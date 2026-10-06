@@ -1,0 +1,35 @@
+{
+    "sub": "a04d69d7-9347-48a3-aa01-8e7ce9aeee04",
+    "iat": 1712847601,
+    "exp": 1712934001,
+    "user_id": "a04d69d7-9347-48a3-aa01-8e7ce9aeee04",
+    "iss": "https://15814390537.propelauthtest.com",
+    "email": "test@propelauth.com",
+    "first_name": "Anthony",
+    "last_name": "Edwards",
+    "username": "username",
+    "org_id_to_org_member_info": {
+        "bdfbbf84-bcee-4dfe-baa5-1e2dc092991d": {
+            "org_id": "bdfbbf84-bcee-4dfe-baa5-1e2dc092991d",
+            "org_name": "Timberwolves",
+            "url_safe_org_name": "timberwolves",
+            "org_metadata": {},
+            "user_role": "Admin",
+            "inherited_user_roles_plus_current_role": [
+                "Admin",
+                "Owner",
+                "Member"
+            ],
+            "user_permissions": [
+                "propelauth::can_invite",
+                "propelauth::can_change_roles",
+                "propelauth::can_remove_users",
+                "propelauth::can_setup_saml",
+                "propelauth::can_manage_api_keys"
+            ]
+        }
+    },
+    "properties": {
+        "favoriteSport": "value"
+    }
+}

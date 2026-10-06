@@ -1,0 +1,80 @@
+{
+    "users": [
+        {
+            "user_id": "026cf5b5-34a0-4bb5-918a-6f910d13d835",
+            "email": "paul@propelauth.com",
+            "email_confirmed": true,
+            "has_password": false,
+            "first_name": "Paul",
+            "last_name": "Test",
+            "picture_url": "https://lh3.googleusercontent.com/a/ACg8ocJGtIn2flEbMt5gIYl7GTlH6IhOpM75950m60fbBleXX3ZO1g=s96-c",
+            "properties": {
+                "tos": true,
+                "metadata": {
+                    "test": "test"
+                }
+            },
+            "metadata": {
+                "test": "test"
+            },
+            "locked": false,
+            "enabled": true,
+            "mfa_enabled": false,
+            "can_create_orgs": false,
+            "created_at": 1712251498,
+            "last_active_at": 1712761310,
+            "update_password_required": false
+        },
+        {
+            "user_id": "4be8134b-7e42-468b-aee1-9ef93d011e30",
+            "email": "paul@propelauth.dev",
+            "email_confirmed": true,
+            "has_password": false,
+            "first_name": "Paul",
+            "last_name": "Test",
+            "picture_url": "https://lh3.googleusercontent.com/a/ACg8ocJzJXY3vq34YgVs2QqgyJfqZmZtPpRsQOXiiEUhuAWv=s96-c",
+            "properties": {
+                "metadata": {
+                    "test": "asdf"
+                },
+                "tos": true
+            },
+            "metadata": {
+                "test": "asdf"
+            },
+            "locked": false,
+            "enabled": true,
+            "mfa_enabled": false,
+            "can_create_orgs": false,
+            "created_at": 1709681042,
+            "last_active_at": 1711980768,
+            "legacy_user_id": "google-oauth2|118009659705648350113",
+            "update_password_required": false
+        },
+        {
+            "user_id": "a04d69d7-9347-48a3-aa01-8e7ce9aeee04",
+            "email": "test@propelauth.com",
+            "email_confirmed": true,
+            "has_password": true,
+            "username": "ant",
+            "first_name": "Anthony",
+            "last_name": "Edwards",
+            "picture_url": "https://img.propelauth.com/2a27d237-db8c-4f82-84fb-5824dfaedc87.png",
+            "properties": {
+                "favoriteSport": "basketball"
+            },
+            "metadata": null,
+            "locked": false,
+            "enabled": true,
+            "mfa_enabled": false,
+            "can_create_orgs": false,
+            "created_at": 1712770147,
+            "last_active_at": 1712770147,
+            "update_password_required": true
+        }
+    ],
+    "total_users": 3,
+    "current_page": 0,
+    "page_size": 10,
+    "has_more_results": false
+}

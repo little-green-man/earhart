@@ -2,6 +2,61 @@
 
 All notable changes to `earhart` will be documented in this file.
 
+## [3.0.0] - 2026-10-06
+
+Contains breaking changes. See [UPGRADE-3.0.md](UPGRADE-3.0.md).
+
+### Changed (breaking)
+
+These come from an audit against PropelAuth's docs, Postman collection and official SDKs; see [docs/PROPELAUTH_API_AUDIT.md](docs/PROPELAUTH_API_AUDIT.md).
+
+- `validateToken()` called `/api/backend/v1/user/me`, which PropelAuth doesn't provide, so `VerifyPropelAuthUser` rejected every token. Tokens are now verified locally as RS256 JWTs against your environment's public key (fetched once and cached, or set with `PROPELAUTH_VERIFIER_KEY`), then the current user is fetched. Invalid tokens throw the new `InvalidTokenException`. Adds a `firebase/php-jwt` dependency
+- `UserData::$orgs` was always empty: it read `orgs`, but PropelAuth sends `org_id_to_org_info`, and `getUser()` didn't request memberships. It is now a map of `OrgMemberInfo` keyed by org ID, and `getUser()` includes memberships by default (`includeOrgs: false` to skip)
+- `VerifyPropelAuthOrg` and `VerifyPropelAuthPermission` use the new membership helpers. Role checks use PropelAuth's inherited roles instead of a hard-coded owner/admin/member order, and `permission:<name>` checks a permission
+- `createOrganisation()` now takes `domain`, `enableAutoJoiningByDomain`, `membersMustHaveMatchingDomain`, `maxUsers`, `legacyOrgId` and `customRoleMappingName`. The `slug` and `metadata` arguments are removed, as PropelAuth doesn't accept them on create
+- `setSAMLIdPMetadata()` takes `idpEntityId`, `idpSsoUrl`, `idpCertificate` and `provider` instead of an XML string, which PropelAuth doesn't accept
+- `fetchSAMLMetadata()` returns a `SamlSpMetadata` (`entityId`, `acsUrl`, `logoutUrl`); it always returned `''`
+- `getRoleMappings()` reads `custom_role_mappings` (it always returned `[]`) and returns `customRoleMappingName` / `numOrgsSubscribed` pairs
+- `subscribeOrgToRoleMapping()` sends `custom_role_mapping_name`; its second argument is renamed from `$mappingId` to `$mappingName`
+- `OrganisationData::$maxOrgMembers` (always null) is renamed `$maxUsers` and now populated
+- `role` is required on `addUserToOrganisation()` and `inviteUserToOrganisation()`, as PropelAuth requires it
+- Cache keys are now prefixed `propelauth.v3.`, so entries cached by 2.x (with the old data shapes) are never read back
+- `VerifyPropelAuthUser` returns 401 only for invalid tokens; other failures, such as PropelAuth being unreachable or a wrong API key, now reach your exception handler. It and `VerifyPropelAuthOrg` no longer catch exceptions thrown by your own code further down the request
+
+- A 404 from any API call now throws. Calls on a user ID throw `InvalidUserException`, calls on an organisation ID throw `InvalidOrgException`, and calls that name both (`addUserToOrganisation()`, `removeUserFromOrganisation()`, `changeUserRole()`) throw a `PropelAuthException` with status 404. Previously writes such as `disableUser()`, `enableUser()` and `deleteUser()` returned `true` for a missing user. Write methods still return `true`; failures always throw
+- API failures throw `PropelAuthException` (or a subclass) instead of a bare `\Exception`: `ValidationException` for 400/422, the new `UnauthorizedException` for 401/403, `RateLimitException` for 429. Code catching `\Exception` still works
+- Exception messages no longer contain the response body (`PropelAuth API error: 500 on DELETE /api/backend/v1/user/{id}`). The body, truncated to 1,024 characters, is in `getContext()['response_body']` and is left out of logs
+- `PropelAuthException::report()` is replaced by `context()`. `report()` stopped Laravel's handler from reporting the exception any further, so error trackers such as Sentry and Nightwatch never received it. Laravel now reports it as normal, with the status code and context (minus the response body) added to the log entry
+- `RateLimitException::fromHeaders()` no longer floors `Retry-After` at 60 seconds, and also accepts an HTTP date
+- Rate-limit retries honour `Retry-After`, are capped by `earhart.retries.max_delay_ms` (default 5 s) and fail at once when `Retry-After` exceeds the cap
+- Internal: `makeRequest()`/`sendRequest()` no longer add a `status` key to the response, so a PropelAuth payload with its own `status` key is no longer misread. `makeRequest()` takes an optional `$notFound` closure. The protected `$maxRetries` and `$initialRetryDelay` properties are removed
+
+### Added
+
+- `validateToken()` takes `fresh: true` to skip the user cache
+- `verifyAccessToken()` on `Earhart` and `UserService`: local token verification returning an `AccessToken` (claims, memberships, impersonator), with no API call
+- `OrgMemberInfo` with `isRole()`, `isAtLeastRole()`, `hasPermission()`; `UserData`/`AccessToken` helpers `org()`, `isMemberOf()`, `roleIn()`, `isRoleIn()`, `isAtLeastRoleIn()`, `hasPermissionIn()`
+- `FeatureNotEnabledException` for 426 responses (organisation calls when B2B support is off)
+- `UserData::$metadata`, `$legacyUserId` and `$roleInOrg` (set by `getOrganisationUsers()`); `OrganisationData::$domain`, `$legacyOrgId`, `$isolated` and password-rotation fields
+- New optional parameters: `createUser()` (`emailConfirmed`, `ignoreDomainRestrictions`, `askUserToUpdatePasswordOnLogin`); `getUserByEmail()`/`getUserByUsername()` (`isolatedOrgId`); `queryUsers()` (`legacyUserId`, `includeOrgs`, `isolatedOrgId`); `createMagicLink()` (`expireAfterFirstUse`, `requiresInterstitial`, `userSignupQueryParameters`); `migrateUserFromExternal()` (`updatePasswordRequired`, `enabled`, `pictureUrl`); `queryOrganisations()` (`name`, `legacyOrgId`, `domain`); `getOrganisationUsers()` (`role`, `includeOrgs`); `updateOrganisation()` (domain, size, SAML, 2FA and password-rotation settings); `additionalRoles` on add, invite and change role; `createSAMLConnectionLink()` (`expiresInSeconds`); `getPendingInvites()` (`pageSize`, `pageNumber`)
+- `earhart.token_verification` config
+- Contract tests against PropelAuth's Node SDK request shapes and Postman example responses
+- `Earhart::fake()` / `PropelAuth::fake()`: an in-memory fake for tests that covers the facade, injected `Earhart`, `UserService` and `OrganisationService`. Seed users and organisations, script failures with `failNext()`, and assert calls such as `assertUserDisabled()`. See [Testing](docs/USING_PROPEL_API.md#testing)
+- `PropelAuthException::forStatus()` builds the exception subclass for an HTTP status
+- `getOrganisationUsers()` takes a `$pageNumber` argument
+- `earhart.http.timeout` and `earhart.http.connect_timeout` config (defaults 30 s and 10 s)
+- `earhart.retries.times`, `base_delay_ms` and `max_delay_ms` config. `times` = 0 disables retries
+- `ValidationException::getErrors()` returns PropelAuth's decoded error body for API failures
+- `RateLimitException::$retryAfterFromHeader`
+- `@throws` docs on every public API method
+
+### Fixed
+
+- Retry jitter was always 0; it is now computed in milliseconds
+- `getOrganisationUsers()` pagination: `nextPage()` and `allPages()` re-fetched the first page instead of the next one
+- `getPendingInvites()` couldn't page, and `allPages()` looped forever when PropelAuth reported more results; `totalItems` now reads `total_invites`
+- Keys inside `user_signup_query_parameters` and each membership's `org_metadata` were renamed to camelCase
+
 ## [2.1.1] - 2026-09-28
 
 ### Removed

@@ -68,7 +68,7 @@ Optionally, publish Earhart's config file to customise caching:
 php artisan vendor:publish --provider="LittleGreenMan\Earhart\ServiceProvider" --tag="config"
 ```
 
-This creates `config/earhart.php` where you can customise cache defaults. Credentials always come from `services.propelauth`.
+This creates `config/earhart.php` where you can customise caching, HTTP timeouts and rate-limit retries. Credentials always come from `services.propelauth`.
 
 ### 5. Update your database
 
@@ -275,6 +275,21 @@ See [USING_PROPEL_API.md](docs/USING_PROPEL_API.md) for complete API documentati
 The middleware shown in step 6 provides secure webhook verification out of the box.
 
 For advanced webhook signature verification options (v1.4+), see [ADVANCED_WEBHOOK_VERIFICATION.md](docs/ADVANCED_WEBHOOK_VERIFICATION.md).
+
+## Testing Your App
+
+Swap Earhart for an in-memory fake, then assert what your code did:
+
+```php
+$fake = \LittleGreenMan\Earhart\Earhart::fake();
+$user = $fake->addUser();
+
+// ... exercise your app ...
+
+$fake->assertUserDisabled($user->userId);
+```
+
+See [Testing](docs/USING_PROPEL_API.md#testing) for seeding, scripted failures and all assertions.
 
 ## Package Testing
 

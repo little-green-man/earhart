@@ -1,0 +1,5 @@
+{
+    "entity_id": "https://example.propelauthtest.com/saml/6983/metadata",
+    "acs_url": "https://example.propelauthtest.com/saml/6983/acs",
+    "logout_url": "https://example.propelauthtest.com/saml/6983/logout"
+}

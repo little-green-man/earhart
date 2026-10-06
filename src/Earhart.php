@@ -2,12 +2,19 @@
 
 namespace LittleGreenMan\Earhart;
 
+use LittleGreenMan\Earhart\Exceptions\InvalidOrgException;
+use LittleGreenMan\Earhart\Exceptions\InvalidTokenException;
+use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
+use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
+use LittleGreenMan\Earhart\PropelAuth\AccessToken;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationData;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationsData;
+use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
 use LittleGreenMan\Earhart\Services\CacheService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 use LittleGreenMan\Earhart\Services\UserService;
+use LittleGreenMan\Earhart\Testing\EarhartFake;
 
 class Earhart
 {
@@ -32,48 +39,95 @@ class Earhart
         $this->organisationService = new OrganisationService($apiKey, $authUrl, $this->cacheService);
     }
 
+    /**
+     * Replace Earhart in the container with an in-memory fake for testing.
+     *
+     * Covers the facade, injected Earhart, UserService and OrganisationService.
+     */
+    public static function fake(): EarhartFake
+    {
+        return (new EarhartFake)->swap();
+    }
+
     // ============================================================
     // User Management Methods (New in v1.4.0)
     // ============================================================
 
     /**
      * Fetch user by ID.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
-    public function getUser(string $userId, bool $fresh = false): UserData
+    public function getUser(string $userId, bool $fresh = false, bool $includeOrgs = true): UserData
     {
-        return $this->userService->getUser($userId, $fresh);
+        return $this->userService->getUser($userId, $fresh, $includeOrgs);
+    }
+
+    /**
+     * Verify an access token locally, then fetch the current user.
+     *
+     * @throws InvalidTokenException If the token is invalid or expired
+     * @throws PropelAuthException On any other API failure
+     */
+    public function validateToken(string $token, bool $fresh = false): UserData
+    {
+        return $this->userService->validateToken($token, $fresh);
+    }
+
+    /**
+     * Verify an access token locally and return its claims, with no API call per token.
+     *
+     * @throws InvalidTokenException If the token is invalid or expired
+     */
+    public function verifyAccessToken(string $token): AccessToken
+    {
+        return $this->userService->verifyAccessToken($token);
     }
 
     /**
      * Fetch user by email address.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
-    public function getUserByEmail(string $email, bool $includeOrgs = true): UserData
+    public function getUserByEmail(string $email, bool $includeOrgs = true, ?string $isolatedOrgId = null): UserData
     {
-        return $this->userService->getUserByEmail($email, $includeOrgs);
+        return $this->userService->getUserByEmail($email, $includeOrgs, $isolatedOrgId);
     }
 
     /**
      * Fetch user by username.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
-    public function getUserByUsername(string $username, bool $includeOrgs = true): UserData
+    public function getUserByUsername(string $username, bool $includeOrgs = true, ?string $isolatedOrgId = null): UserData
     {
-        return $this->userService->getUserByUsername($username, $includeOrgs);
+        return $this->userService->getUserByUsername($username, $includeOrgs, $isolatedOrgId);
     }
 
     /**
      * Query users with pagination and filtering.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function queryUsers(
         ?string $emailOrUsername = null,
         ?string $orderBy = 'CREATED_AT_DESC',
         int $pageNumber = 0,
         int $pageSize = 10,
-    ) {
-        return $this->userService->queryUsers($emailOrUsername, $orderBy, $pageNumber, $pageSize);
+        ?string $legacyUserId = null,
+        bool $includeOrgs = false,
+        ?string $isolatedOrgId = null,
+    ): PaginatedResult {
+        return $this->userService->queryUsers($emailOrUsername, $orderBy, $pageNumber, $pageSize, $legacyUserId, $includeOrgs, $isolatedOrgId);
     }
 
     /**
      * Create a new user.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function createUser(
         string $email,
@@ -83,6 +137,9 @@ class Earhart
         ?string $username = null,
         ?array $properties = null,
         bool $sendConfirmationEmail = false,
+        ?bool $emailConfirmed = null,
+        ?bool $ignoreDomainRestrictions = null,
+        ?bool $askUserToUpdatePasswordOnLogin = null,
     ): string {
         return $this->userService->createUser(
             $email,
@@ -92,11 +149,17 @@ class Earhart
             $username,
             $properties,
             $sendConfirmationEmail,
+            $emailConfirmed,
+            $ignoreDomainRestrictions,
+            $askUserToUpdatePasswordOnLogin,
         );
     }
 
     /**
      * Update user metadata.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function updateUser(
         string $userId,
@@ -122,6 +185,9 @@ class Earhart
 
     /**
      * Update user email address.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function updateUserEmail(string $userId, string $newEmail, bool $requireConfirmation = true): bool
     {
@@ -130,6 +196,9 @@ class Earhart
 
     /**
      * Update user password.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function updateUserPassword(string $userId, string $password, bool $askForUpdateOnLogin = false): bool
     {
@@ -138,6 +207,9 @@ class Earhart
 
     /**
      * Clear user password.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function clearUserPassword(string $userId): bool
     {
@@ -146,18 +218,34 @@ class Earhart
 
     /**
      * Create a magic link for passwordless login.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function createMagicLink(
         string $email,
         ?string $redirectUrl = null,
         ?int $expiresInHours = 24,
         bool $createIfNotExists = false,
+        ?bool $expireAfterFirstUse = null,
+        ?bool $requiresInterstitial = null,
+        ?array $userSignupQueryParameters = null,
     ): string {
-        return $this->userService->createMagicLink($email, $redirectUrl, $expiresInHours, $createIfNotExists);
+        return $this->userService->createMagicLink(
+            $email,
+            $redirectUrl,
+            $expiresInHours,
+            $createIfNotExists,
+            $expireAfterFirstUse,
+            $requiresInterstitial,
+            $userSignupQueryParameters,
+        );
     }
 
     /**
      * Create an access token for a user.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function createAccessToken(
         string $userId,
@@ -169,6 +257,9 @@ class Earhart
 
     /**
      * Disable a user (block from login).
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function disableUser(string $userId): bool
     {
@@ -177,6 +268,9 @@ class Earhart
 
     /**
      * Enable a user (unblock).
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function enableUser(string $userId): bool
     {
@@ -185,6 +279,9 @@ class Earhart
 
     /**
      * Delete a user.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function deleteUser(string $userId): bool
     {
@@ -193,6 +290,9 @@ class Earhart
 
     /**
      * Disable 2FA for a user.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function disable2FA(string $userId): bool
     {
@@ -201,6 +301,9 @@ class Earhart
 
     /**
      * Resend email confirmation to a user.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function resendEmailConfirmation(string $userId): bool
     {
@@ -209,6 +312,9 @@ class Earhart
 
     /**
      * Logout user from all sessions.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function logoutAllSessions(string $userId): bool
     {
@@ -217,6 +323,9 @@ class Earhart
 
     /**
      * Fetch user signup query parameters.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function getUserSignupParams(string $userId): array
     {
@@ -225,6 +334,8 @@ class Earhart
 
     /**
      * Migrate user from external source.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function migrateUserFromExternal(
         string $email,
@@ -236,6 +347,9 @@ class Earhart
         ?string $lastName = null,
         ?string $username = null,
         ?array $properties = null,
+        ?bool $updatePasswordRequired = null,
+        ?bool $enabled = null,
+        ?string $pictureUrl = null,
     ): string {
         return $this->userService->migrateUserFromExternal(
             $email,
@@ -247,6 +361,9 @@ class Earhart
             $lastName,
             $username,
             $properties,
+            $updatePasswordRequired,
+            $enabled,
+            $pictureUrl,
         );
     }
 
@@ -255,6 +372,9 @@ class Earhart
      *
      * @param  string  $userId  The user ID
      * @param  string  $passwordHash  The password hash (must be pre-hashed using bcrypt, scrypt, or argon2)
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function migrateUserPassword(string $userId, string $passwordHash): bool
     {
@@ -267,6 +387,9 @@ class Earhart
 
     /**
      * Fetch organization by ID.
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function getOrganisation(string $id): OrganisationData
     {
@@ -275,6 +398,8 @@ class Earhart
 
     /**
      * Fetch all organisations with pagination.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function getOrganisations(int $pageSize = 1000)
     {
@@ -295,6 +420,9 @@ class Earhart
      * Fetch users in organisation.
      *
      * @return array<UserData>
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function getUsersInOrganisation(string $organisationId): array
     {

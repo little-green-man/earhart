@@ -32,6 +32,7 @@ echo $user->emailConfirmed;  // true
 ## Table of Contents
 
 - [Getting Started](#getting-started)
+- [Validating Access Tokens](#validating-access-tokens)
 - [User Management](#user-management)
   - [Fetching Users](#fetching-users)
   - [Creating Users](#creating-users)
@@ -47,6 +48,7 @@ echo $user->emailConfirmed;  // true
 - [Pagination & Data Handling](#pagination--data-handling)
 - [Caching](#caching)
 - [Error Handling](#error-handling)
+- [Testing](#testing)
 - [Advanced Usage](#advanced-usage)
 - [Missing Features & Limitations](#missing-features--limitations)
 
@@ -65,6 +67,31 @@ public function __construct(protected Earhart $earhart) {}
 ```
 
 Ensure your PropelAuth API key is configured in `.env` as `PROPELAUTH_API_KEY`.
+
+## Validating Access Tokens
+
+Access tokens are verified locally: Earhart fetches your environment's public key once from PropelAuth, caches it, and checks each token's signature, expiry and issuer, with 60 seconds of clock skew allowed.
+
+```php
+use LittleGreenMan\Earhart\Exceptions\InvalidTokenException;
+
+try {
+    // No API call per token
+    $token = app('earhart')->verifyAccessToken($request->bearerToken());
+    $token->userId;
+    $token->isAtLeastRoleIn($orgId, 'Admin');
+    $token->isImpersonated();
+
+    // Or verify, then fetch the current user (picks up a user disabled since the token was issued)
+    $user = app('earhart')->validateToken($request->bearerToken());
+} catch (InvalidTokenException $e) {
+    abort(401);
+}
+```
+
+`VerifyPropelAuthUser` uses `validateToken()`. With caching enabled, the user it fetches can be up to the cache TTL old unless PropelAuth's webhooks invalidate it; pass `fresh: true` to `validateToken()` to always fetch. If PropelAuth can't be reached or the API key is wrong, the middleware lets the exception through to your error handler rather than returning 401. To skip the key request, set `PROPELAUTH_VERIFIER_KEY` to the public key from the **Backend Integration** page. After rotating the key in PropelAuth, call `app('earhart')->users()->forgetVerifierKey()`.
+
+`VerifyPropelAuthOrg` and `VerifyPropelAuthPermission` read memberships from the user. `VerifyPropelAuthPermission` takes a role and passes any user whose role inherits it (an Owner passes `Admin`), or `permission:<name>` to check a permission.
 
 ## User Management
 
@@ -98,12 +125,17 @@ try {
     // Access custom properties
     $properties = $user->properties;
     
-    // Access user's organizations
-    foreach ($user->orgs as $org) {
-        echo $org['orgId'];
-        echo $org['orgName'];
-        echo $org['userAssignedRole'];
+    // Memberships (included by default; pass includeOrgs: false to skip)
+    foreach ($user->orgs as $orgId => $org) {   // OrgMemberInfo, keyed by org ID
+        echo $org->orgName;
+        echo $org->userRole;                    // e.g. Admin
+        print_r($org->userPermissions);         // e.g. ['propelauth::can_invite']
     }
+
+    $user->isMemberOf($orgId);
+    $user->roleIn($orgId);                      // Admin
+    $user->isAtLeastRoleIn($orgId, 'Member');   // true: uses your role hierarchy
+    $user->hasPermissionIn($orgId, 'propelauth::can_invite');
 } catch (InvalidUserException $e) {
     // User not found
     Log::error('User not found: ' . $e->getMessage());
@@ -339,12 +371,14 @@ app('earhart')->disableUser('user_id_here');
 app('earhart')->enableUser('user_id_here');
 ```
 
+Both throw `InvalidUserException` if the user does not exist.
+
 #### Delete User
 
 > **API Reference**: [Delete User](https://docs.propelauth.com/reference/api/user#delete-user)
 
 ```php
-app('earhart')->deleteUser('user_id_here');
+app('earhart')->deleteUser('user_id_here'); // Throws InvalidUserException if the user does not exist
 ```
 
 #### Disable Two-Factor Authentication
@@ -475,15 +509,15 @@ foreach ($users as $user) {
 ```php
 $orgId = app('earhart')->organisations()->createOrganisation(
     name: 'New Company Inc',
-    slug: 'new-company',
-    metadata: [
-        'industry' => 'Technology',
-        'size' => 'Enterprise',
-        'country' => 'US'
-    ]
+    domain: 'newcompany.com',
+    enableAutoJoiningByDomain: true,       // Users with a matching email domain can join without an invite
+    membersMustHaveMatchingDomain: false,
+    maxUsers: 50,
+    customRoleMappingName: 'Business Plan',
 );
 
-echo "Created organization with ID: {$orgId}";
+// Metadata can't be set on create; follow up with an update
+app('earhart')->organisations()->updateOrganisation($orgId, metadata: ['industry' => 'Technology']);
 ```
 
 #### Update Organisation
@@ -494,12 +528,14 @@ echo "Created organization with ID: {$orgId}";
 app('earhart')->organisations()->updateOrganisation(
     orgId: 'org_id_here',
     name: 'Updated Company Name',
-    metadata: [
-        'industry' => 'Software',
-        'updated_at' => now()->toIso8601String()
-    ]
+    metadata: ['industry' => 'Software'],
+    autojoinByDomain: true,
+    maxUsers: 100,
+    require2faBy: now()->addMonth(),   // or a string like "2026-01-20 12:34:56 UTC"
 );
 ```
+
+Only the arguments you pass are changed. Also available: `domain`, `extraDomains`, `restrictToDomain`, `canSetupSaml`, `legacyOrgId`, `ssoTrustLevel` and the `passwordRotation*` settings.
 
 #### Delete Organisation
 
@@ -525,7 +561,8 @@ try {
 app('earhart')->organisations()->addUserToOrganisation(
     orgId: 'org_id_here',
     userId: 'user_id_here',
-    role: 'Member'
+    role: 'Member',                 // Required
+    additionalRoles: ['Billing'],   // Optional, for multi-role setups
 );
 ```
 
@@ -537,7 +574,7 @@ app('earhart')->organisations()->addUserToOrganisation(
 app('earhart')->organisations()->inviteUserToOrganisation(
     orgId: 'org_id_here',
     email: 'newuser@example.com',
-    role: 'Admin'
+    role: 'Admin',                  // Required
 );
 ```
 
@@ -574,9 +611,7 @@ app('earhart')->organisations()->changeUserRole(
 $roleMappings = app('earhart')->organisations()->getRoleMappings();
 
 foreach ($roleMappings as $mapping) {
-    echo "Role mapping ID: {$mapping['customRoleMappingId']}\n";
-    echo "Name: {$mapping['name']}\n";
-    // Access role definitions
+    echo "{$mapping['customRoleMappingName']}: {$mapping['numOrgsSubscribed']} organisations\n";
 }
 ```
 
@@ -587,7 +622,7 @@ foreach ($roleMappings as $mapping) {
 ```php
 app('earhart')->organisations()->subscribeOrgToRoleMapping(
     orgId: 'org_id_here',
-    mappingId: 'mapping_id_here'
+    mappingName: 'Paid Plan',
 );
 ```
 
@@ -601,14 +636,14 @@ app('earhart')->organisations()->subscribeOrgToRoleMapping(
 // Get all pending invites
 $result = app('earhart')->organisations()->getPendingInvites();
 
-foreach ($result->items as $invite) {
-    echo "Email: {$invite['email']}\n";
+foreach ($result->allPages() as $invite) {
+    echo "Email: {$invite['inviteeEmail']}\n";
     echo "Org: {$invite['orgName']}\n";
-    echo "Role: {$invite['role']}\n";
+    echo "Role: {$invite['roleInOrg']}\n";
 }
 
-// Get pending invites for specific org
-$result = app('earhart')->organisations()->getPendingInvites(orgId: 'org_id_here');
+// For one organisation, paged
+$result = app('earhart')->organisations()->getPendingInvites(orgId: 'org_id_here', pageSize: 20, pageNumber: 0);
 ```
 
 #### Revoke Pending Invite
@@ -635,7 +670,7 @@ app('earhart')->organisations()->allowOrgToSetupSAML('org_id_here');
 #### Create SAML Connection Link
 
 ```php
-$url = app('earhart')->organisations()->createSAMLConnectionLink('org_id_here');
+$url = app('earhart')->organisations()->createSAMLConnectionLink('org_id_here', expiresInSeconds: 86400);
 return redirect($url);
 ```
 
@@ -644,18 +679,21 @@ return redirect($url);
 ```php
 $metadata = app('earhart')->organisations()->fetchSAMLMetadata('org_id_here');
 
-// Return as XML response
-return response($metadata)->header('Content-Type', 'application/xml');
+// Give these to the organisation's IdP
+echo $metadata->entityId;
+echo $metadata->acsUrl;
+echo $metadata->logoutUrl;
 ```
 
 #### Set SAML IdP Metadata
 
 ```php
-$metadataXml = '<?xml version="1.0"?>...'; // IdP metadata XML
-
 app('earhart')->organisations()->setSAMLIdPMetadata(
     orgId: 'org_id_here',
-    metadataXml: $metadataXml
+    idpEntityId: 'http://www.okta.com/example',
+    idpSsoUrl: 'https://dev.okta.com/app/example/sso/saml',
+    idpCertificate: '-----BEGIN CERTIFICATE-----...-----END CERTIFICATE-----',
+    provider: 'Okta',
 );
 ```
 
@@ -795,6 +833,23 @@ class InvalidateUserCacheListener
 
 ## Error Handling
 
+Every API failure throws a `PropelAuthException` or one of its subclasses. Each has `getStatusCode()` and `getContext()`.
+
+| Exception | When |
+| --- | --- |
+| `InvalidUserException` | 404 on a call that takes a user ID, email or username |
+| `InvalidOrgException` | 404 on a call that takes an organisation ID |
+| `ValidationException` | 400 or 422. `getErrors()` returns PropelAuth's error body |
+| `UnauthorizedException` | 401 or 403, usually a wrong or under-privileged API key |
+| `RateLimitException` | 429 after retries are used up. `$retryAfterSeconds` holds the wait |
+| `InvalidTokenException` | An access token is malformed, expired, or from another environment |
+| `FeatureNotEnabledException` | 426: the feature isn't enabled for the project (organisation calls need B2B support) |
+| `PropelAuthException` | Anything else, including a 404 on calls naming both a user and an organisation |
+
+Write methods return `true` on success and throw on failure, so a missing user or organisation never passes silently.
+
+Messages hold only the status, method and endpoint. The response body, truncated, is in `getContext()['response_body']`; it may contain user data, so decide whether to send it to your error tracker.
+
 ### Common Exceptions
 
 ```php
@@ -808,6 +863,13 @@ try {
 } catch (InvalidUserException $e) {
     Log::warning('User not found', ['error' => $e->getMessage()]);
     return response()->json(['error' => 'User not found'], 404);
+}
+
+// Treat "already gone" as success, e.g. in a GDPR erase
+try {
+    app('earhart')->deleteUser($propelId);
+} catch (InvalidUserException $e) {
+    // Nothing to delete
 }
 
 // Organization not found
@@ -826,10 +888,24 @@ try {
 }
 ```
 
+### Timeouts and Retries
+
+Requests time out after `earhart.http.timeout` seconds (default 30; connect timeout 10). A 429 is retried `earhart.retries.times` times (default 2), waiting for PropelAuth's `Retry-After` or backing off exponentially, but never longer than `earhart.retries.max_delay_ms` (default 5,000). If `Retry-After` asks for longer, the exception is thrown at once.
+
+Waits block the PHP worker, so you may want no retries in web requests and more in queued jobs:
+
+```php
+// .env: PROPELAUTH_RETRY_TIMES=0
+
+// In a job
+config(['earhart.retries.times' => 3, 'earhart.retries.max_delay_ms' => 60_000]);
+```
+
 ### Graceful Error Handling
 
 ```php
 use Illuminate\Support\Facades\Cache;
+use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 
 public function getUserSafely(string $userId)
 {
@@ -841,15 +917,89 @@ public function getUserSafely(string $userId)
     } catch (RateLimitException $e) {
         // Rate limited - return cached data if available
         return Cache::get("user.{$userId}.fallback");
-    } catch (\Exception $e) {
+    } catch (PropelAuthException $e) {
         // Log unexpected errors
         Log::error('PropelAuth API error', [
             'user_id' => $userId,
-            'error' => $e->getMessage()
+            'status' => $e->getStatusCode(),
+            'error' => $e->getMessage(),
         ]);
         return null;
     }
 }
+```
+
+## Testing
+
+`Earhart::fake()` (or `PropelAuth::fake()`) swaps Earhart for an in-memory fake. It replaces the facade, injected `Earhart`, `UserService` and `OrganisationService`, so the middleware and `users()`/`organisations()` use it too. Nothing is sent to PropelAuth.
+
+```php
+use LittleGreenMan\Earhart\Earhart;
+use LittleGreenMan\Earhart\Services\UserService;
+
+test('admins can disable a user', function () {
+    $fake = Earhart::fake();
+    $user = $fake->addUser(['email' => 'jane@example.com']);
+
+    $this->post("/admin/users/{$user->userId}/disable")->assertOk();
+
+    $fake->assertUserDisabled($user->userId);
+});
+```
+
+### Seeding
+
+```php
+$user = $fake->addUser(['email' => 'jane@example.com', 'firstName' => 'Jane']); // UserData; missing fields get defaults
+$org = $fake->addOrganisation(['name' => 'Acme'], members: [$user->userId => 'Admin']);
+$fake->addMember($org->orgId, $otherUserId, 'Member');
+$token = $fake->issueToken($user->userId); // Accepted by validateToken(), verifyAccessToken() and VerifyPropelAuthUser
+$fake->withRolePermissions(['Admin' => ['propelauth::can_invite']]); // Roles default to Owner > Admin > Member
+```
+
+Seeding is not recorded as a call.
+
+### Behaviour
+
+The fake keeps state: `disableUser()` sets `enabled` to `false`, `deleteUser()` removes the user and their memberships, `createUser()` with an existing email throws a `ValidationException`, and so on. Calls on a missing user or organisation throw the same exceptions as the real services, so you can test "already gone" handling without scripting anything.
+
+### Scripting failures
+
+```php
+$fake->failNext(UserService::class, 500);           // Next UserService call throws PropelAuthException (500)
+$fake->failNext('deleteUser', 429);                 // Next deleteUser() throws RateLimitException
+$fake->failNext('getUser', 403, times: 2);          // Next two getUser() calls throw UnauthorizedException
+$fake->failNext('getUser', InvalidUserException::notFound('x')); // Throw a specific exception
+```
+
+A status maps to the same exception the real services throw. A method-specific failure is used before a service-wide one.
+
+### Assertions
+
+Assertions only count calls that succeeded.
+
+```php
+$fake->assertUserCreated('jane@example.com');
+$fake->assertUserUpdated($userId);
+$fake->assertUserDisabled($userId);
+$fake->assertUserEnabled($userId);
+$fake->assertUserDeleted($userId);
+$fake->assertUserLoggedOut($userId);
+$fake->assertOrganisationCreated('Acme');
+$fake->assertOrganisationUpdated($orgId);
+$fake->assertOrganisationDeleted($orgId);
+$fake->assertUserAddedToOrganisation($orgId, $userId, 'Admin');
+$fake->assertUserRemovedFromOrganisation($orgId, $userId);
+$fake->assertUserInvitedToOrganisation($orgId, 'new@example.com');
+
+// Any method, with its named arguments
+$fake->assertCalled('createAccessToken', fn (array $args) => $args['durationInMinutes'] === 5);
+$fake->assertCalledTimes('getUser', 2);
+$fake->assertNotCalled('deleteUser');
+$fake->assertNothingCalled();
+
+// Raw log, including failed calls
+$fake->calls();
 ```
 
 ## Advanced Usage
@@ -994,7 +1144,7 @@ protected function schedule(Schedule $schedule)
 3. **Use webhooks** for real-time updates instead of polling the API
 4. **Invalidate cache** when data changes via webhooks
 5. **Use `fresh: true`** for critical operations where stale data could cause issues
-6. **Implement exponential backoff** when handling rate limit exceptions
+6. **Tune `earhart.retries`**: fail fast in web requests, retry in queued jobs
 7. **Never expose your API key** in client-side code or logs
 
 ## Missing Features & Limitations

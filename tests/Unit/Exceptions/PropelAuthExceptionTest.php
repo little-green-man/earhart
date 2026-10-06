@@ -2,7 +2,7 @@
 
 namespace LittleGreenMan\Earhart\Tests\Unit\Exceptions;
 
-use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 use LittleGreenMan\Earhart\Exceptions\InvalidOrgException;
 use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
 use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
@@ -32,22 +32,23 @@ describe('PropelAuthException', function () {
         expect($exception->getStatusCode())->toBe(500);
     });
 
-    test('logs error with context', function () {
-        $context = ['user_id' => 'test123'];
-        $exception = new PropelAuthException('Test error', 400, $context);
+    test('adds status and context to the log context', function () {
+        $exception = new PropelAuthException('Test error', 400, ['user_id' => 'test123']);
 
-        // Mock Log facade
-        Log::shouldReceive('error')
-            ->once()
-            ->with('Test error', \Mockery::on(function ($logged) use ($context) {
-                return
-                    isset($logged['status_code'])
-                    && $logged['status_code'] === 400
-                    && isset($logged['context'])
-                    && $logged['context'] === $context;
-            }));
+        expect($exception->context())->toBe([
+            'status_code' => 400,
+            'context' => ['user_id' => 'test123'],
+        ]);
+    });
 
-        $exception->report();
+    test('leaves the response body out of the log context', function () {
+        $exception = new PropelAuthException('Test error', 500, ['endpoint' => '/x', 'response_body' => 'jane@example.com']);
+
+        expect($exception->context()['context'])->toBe(['endpoint' => '/x']);
+    });
+
+    test('does not stop Laravel reporting it', function () {
+        expect(method_exists(PropelAuthException::class, 'report'))->toBeFalse();
     });
 
     test('can chain with previous exception', function () {
@@ -177,10 +178,25 @@ describe('RateLimitException', function () {
         expect($exception->retryAfterSeconds)->toBe(60);
     });
 
-    test('fromHeaders ensures minimum retry time', function () {
-        $exception = RateLimitException::fromHeaders('30');
+    test('fromHeaders honours short retry times', function () {
+        $exception = RateLimitException::fromHeaders('3');
 
-        expect($exception->retryAfterSeconds)->toBeGreaterThanOrEqual(60);
+        expect($exception->retryAfterSeconds)->toBe(3)
+            ->and($exception->retryAfterFromHeader)->toBeTrue();
+    });
+
+    test('fromHeaders parses an HTTP date', function () {
+        Carbon::setTestNow('2026-10-06 12:00:00');
+
+        $exception = RateLimitException::fromHeaders('Tue, 06 Oct 2026 12:00:30 GMT');
+
+        expect($exception->retryAfterSeconds)->toBe(30);
+
+        Carbon::setTestNow();
+    });
+
+    test('fromHeaders marks the default as not from the header', function () {
+        expect(RateLimitException::fromHeaders(null)->retryAfterFromHeader)->toBeFalse();
     });
 
     test('has 429 http status code', function () {

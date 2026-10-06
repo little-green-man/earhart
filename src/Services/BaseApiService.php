@@ -4,6 +4,7 @@ namespace LittleGreenMan\Earhart\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
+use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\Exceptions\RateLimitException;
 
 /**
@@ -15,9 +16,18 @@ use LittleGreenMan\Earhart\Exceptions\RateLimitException;
  */
 abstract class BaseApiService
 {
-    protected int $maxRetries = 3;
-
-    protected int $initialRetryDelay = 1; // seconds
+    /**
+     * Keys whose contents are user-defined or keyed by ID, so are never case-converted.
+     * `org_id_to_org_info` stays snake_case inside; OrgMemberInfo reads it as such.
+     */
+    protected const UNCONVERTED_KEYS = [
+        'properties',
+        'metadata',
+        'orgs',
+        'org_id_to_org_info',
+        'org_metadata',
+        'user_signup_query_parameters',
+    ];
 
     public function __construct(
         protected string $apiKey,
@@ -51,9 +61,8 @@ abstract class BaseApiService
             }
 
             // Recursively convert nested arrays, but preserve user-defined data
-            // Don't convert keys in properties, metadata, or orgs arrays
             if (is_array($value)) {
-                $shouldSkipNested = $skipConversion || in_array($snakeKey, ['properties', 'metadata', 'orgs'], true);
+                $shouldSkipNested = $skipConversion || in_array($snakeKey, self::UNCONVERTED_KEYS, true);
                 $result[$snakeKey] = $this->toSnakeCase($value, $shouldSkipNested);
             } else {
                 $result[$snakeKey] = $value;
@@ -84,9 +93,8 @@ abstract class BaseApiService
             }
 
             // Recursively convert nested arrays, but preserve user-defined data
-            // Don't convert keys in properties, metadata, or orgs arrays
             if (is_array($value)) {
-                $shouldSkipNested = $skipConversion || in_array($key, ['properties', 'metadata', 'orgs'], true);
+                $shouldSkipNested = $skipConversion || in_array($key, self::UNCONVERTED_KEYS, true);
                 $result[$camelKey] = $this->toCamelCase($value, $shouldSkipNested);
             } else {
                 $result[$camelKey] = $value;
@@ -103,9 +111,12 @@ abstract class BaseApiService
      * then converts response keys to camelCase for PHP conventions.
      *
      * @param  array<string, mixed>  $data
+     * @param  (\Closure(): PropelAuthException)|null  $notFound  Builds the exception thrown on a 404
      * @return array<string, mixed>
+     *
+     * @throws PropelAuthException On any failed response, as the subclass matching its status
      */
-    protected function makeRequest(string $method, string $endpoint, array $data = []): array
+    protected function makeRequest(string $method, string $endpoint, array $data = [], ?\Closure $notFound = null): array
     {
         // Convert outgoing parameters to snake_case
         $snakeCaseData = $this->toSnakeCase($data);
@@ -115,8 +126,15 @@ abstract class BaseApiService
             $snakeCaseData = $this->convertBooleansToStrings($snakeCaseData);
         }
 
-        // Execute request with retry logic
-        $response = $this->executeWithRetry(fn () => $this->sendRequest($method, $endpoint, $snakeCaseData));
+        try {
+            $response = $this->executeWithRetry(fn () => $this->sendRequest($method, $endpoint, $snakeCaseData));
+        } catch (PropelAuthException $e) {
+            if ($notFound !== null && $e->getStatusCode() === 404) {
+                throw $notFound();
+            }
+
+            throw $e;
+        }
 
         // Convert response keys to camelCase for PHP conventions
         return $this->toCamelCase($response);
@@ -150,11 +168,16 @@ abstract class BaseApiService
      * Send HTTP request to PropelAuth API.
      *
      * @param  array<string, mixed>  $data
-     * @return array<string, mixed>
+     * @return array<string, mixed> The decoded response body
+     *
+     * @throws PropelAuthException On any failed response, including a 404
      */
     protected function sendRequest(string $method, string $endpoint, array $data = []): array
     {
-        $request = Http::withToken($this->apiKey)->withHeaders(['Content-Type' => 'application/json'])->timeout(30);
+        $request = Http::withToken($this->apiKey)
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->timeout((float) config('earhart.http.timeout', 30))
+            ->connectTimeout((float) config('earhart.http.connect_timeout', 10));
 
         $response = match ($method) {
             'GET' => $request->get($this->authUrl.$endpoint, $data),
@@ -164,50 +187,51 @@ abstract class BaseApiService
             default => throw new \InvalidArgumentException("Unsupported method: {$method}"),
         };
 
-        if ($response->status() === 429) {
-            throw RateLimitException::fromHeaders($response->header('Retry-After'));
-        }
-
-        // Allow 404 to pass through - let callers handle it
-        // But throw for other error responses
-        if ($response->failed() && $response->status() !== 404) {
-            throw new \Exception("PropelAuth API error: {$response->status()} - {$response->body()}");
+        if ($response->failed()) {
+            throw PropelAuthException::fromResponse($method, $endpoint, $response);
         }
 
         $json = $response->json();
-        if (! is_array($json)) {
-            $json = [];
-        }
 
-        return $json + ['status' => $response->status()];
+        return is_array($json) ? $json : [];
     }
 
     /**
      * Execute request with automatic retry logic for rate limiting.
+     *
+     * Retries up to `earhart.retries.times` times. Each wait is the
+     * Retry-After value when PropelAuth sends one, otherwise exponential
+     * backoff with jitter, and never exceeds `earhart.retries.max_delay_ms`.
+     * If Retry-After asks for longer than that cap, the exception is
+     * rethrown at once rather than retrying too early.
      */
     protected function executeWithRetry(\Closure $callback): mixed
     {
-        $attempt = 0;
-        $lastException = null;
+        $retries = max(0, (int) config('earhart.retries.times', 2));
+        $baseDelay = max(0, (int) config('earhart.retries.base_delay_ms', 2000));
+        $maxDelay = max(0, (int) config('earhart.retries.max_delay_ms', 5000));
 
-        while ($attempt < $this->maxRetries) {
+        for ($attempt = 0; ; $attempt++) {
             try {
                 return $callback();
             } catch (RateLimitException $e) {
-                $lastException = $e;
-                $attempt++;
-
-                if ($attempt >= $this->maxRetries) {
-                    break;
+                if ($attempt >= $retries) {
+                    throw $e;
                 }
 
-                // Exponential backoff with jitter
-                $delay = $this->initialRetryDelay * (2 ** $attempt);
-                $jitter = random_int(0, (int) ($delay * 0.1));
-                Sleep::for($delay + $jitter)->seconds();
+                if ($e->retryAfterFromHeader) {
+                    $delay = $e->retryAfterSeconds * 1000;
+
+                    if ($delay > $maxDelay) {
+                        throw $e;
+                    }
+                } else {
+                    $delay = $baseDelay * (2 ** $attempt);
+                    $delay = min($delay + random_int(0, intdiv($delay, 10)), $maxDelay);
+                }
+
+                Sleep::for($delay)->milliseconds();
             }
         }
-
-        throw $lastException ?? new \RuntimeException('Max retries exceeded');
     }
 }

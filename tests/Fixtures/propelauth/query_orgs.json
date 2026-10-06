@@ -1,0 +1,14 @@
+{
+    "orgs": [
+        {
+            "org_id": "582e7c11-6b72-40d8-886d-461e6491fa71",
+            "name": "Acme Inc",
+            "is_saml_configured": false,
+            "custom_role_mapping_name": "Business Plan"
+        }
+    ],
+    "total_orgs": 1,
+    "current_page": 0,
+    "page_size": 10,
+    "has_more_results": false
+}

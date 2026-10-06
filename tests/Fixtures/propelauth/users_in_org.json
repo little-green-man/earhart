@@ -1,0 +1,34 @@
+{
+    "users": [
+        {
+            "user_id": "026cf5b5-34a0-4bb5-918a-6f910d13d835",
+            "role_in_org": "Admin",
+            "email": "paul@propelauth.com",
+            "email_confirmed": true,
+            "has_password": false,
+            "first_name": "Paul",
+            "last_name": "Test",
+            "picture_url": "https://lh3.googleusercontent.com/a/ACg8ocJGtIn2flEbMt5gIYl7GTlH6IhOpM75950m60fbBleXX3ZO1g=s96-c",
+            "properties": {
+                "metadata": {
+                    "test": "test"
+                },
+                "tos": true
+            },
+            "metadata": {
+                "test": "test"
+            },
+            "locked": false,
+            "enabled": true,
+            "mfa_enabled": false,
+            "can_create_orgs": false,
+            "created_at": 1712251498,
+            "last_active_at": 1712761310,
+            "update_password_required": false
+        }
+    ],
+    "total_users": 1,
+    "current_page": 0,
+    "page_size": 10,
+    "has_more_results": false
+}

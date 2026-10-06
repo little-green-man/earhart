@@ -62,7 +62,7 @@ describe('Earhart', function () {
             'urlSafeOrgSlug' => 'test-org',
             'createdAt' => 1609459200,
             'metadata' => [],
-            'maxOrgMembers' => 100,
+            'maxUsers' => 100,
             'isSamlConfigured' => false,
             'customRoleMappingName' => 'default',
         ], $overrides);

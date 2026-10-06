@@ -3,303 +3,103 @@
 namespace LittleGreenMan\Earhart\Tests\Unit\Middleware;
 
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use LittleGreenMan\Earhart\Middleware\VerifyPropelAuthPermission;
+use LittleGreenMan\Earhart\PropelAuth\AccessToken;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
 use LittleGreenMan\Earhart\Tests\TestCase;
 
 uses(TestCase::class);
 
+/**
+ * A user as PropelAuth returns it, with org_id_to_org_info left in snake_case.
+ *
+ * @param  list<string>  $inherited
+ * @param  list<string>  $permissions
+ */
+function userWithMembership(string $orgId, string $role, array $inherited, array $permissions = []): UserData
+{
+    return UserData::fromArray([
+        'userId' => 'user123',
+        'email' => 'test@example.com',
+        'emailConfirmed' => true,
+        'pictureUrl' => 'https://example.com/pic.jpg',
+        'createdAt' => 1609459200,
+        'lastActiveAt' => 1609459200,
+        'orgIdToOrgInfo' => [
+            $orgId => [
+                'org_id' => $orgId,
+                'org_name' => 'Timberwolves',
+                'org_metadata' => [],
+                'url_safe_org_name' => 'timberwolves',
+                'user_role' => $role,
+                'inherited_user_roles_plus_current_role' => $inherited,
+                'user_permissions' => $permissions,
+            ],
+        ],
+    ]);
+}
+
+function runPermission(mixed $user, ?string $orgId, string $required): int
+{
+    $request = Request::create('/');
+    $request->attributes->set('propelauth_user', $user);
+
+    if ($orgId !== null) {
+        $request->attributes->set('propelauth_org_id', $orgId);
+    }
+
+    return (new VerifyPropelAuthPermission)->handle($request, fn () => response('OK'), $required)->getStatusCode();
+}
+
 describe('VerifyPropelAuthPermission', function () {
-    function mockUserWithRole(string $orgId, string $role): UserData
-    {
-        return UserData::fromArray([
-            'userId' => 'user123',
-            'email' => 'test@example.com',
-            'emailConfirmed' => true,
-            'firstName' => 'John',
-            'lastName' => 'Doe',
-            'username' => 'johndoe',
-            'pictureUrl' => 'https://example.com/pic.jpg',
-            'properties' => [],
-            'locked' => false,
-            'enabled' => true,
-            'hasPassword' => true,
-            'updatePasswordRequired' => false,
-            'mfaEnabled' => false,
-            'canCreateOrgs' => true,
-            'createdAt' => 1609459200,
-            'lastActiveAt' => 1609459200,
-            'orgs' => [
-                [
-                    'id' => $orgId,
-                    'display_name' => 'Test Org',
-                    'user_role' => $role,
-                ],
-            ],
-        ]);
-    }
+    test('uses PropelAuth inherited roles', function (string $role, array $inherited, string $required, int $status) {
+        expect(runPermission(userWithMembership('org1', $role, $inherited), 'org1', $required))->toBe($status);
+    })->with([
+        'owner passes member' => ['Owner', ['Owner', 'Admin', 'Member'], 'Member', 200],
+        'owner passes admin' => ['Owner', ['Owner', 'Admin', 'Member'], 'Admin', 200],
+        'admin passes member' => ['Admin', ['Admin', 'Member'], 'Member', 200],
+        'admin fails owner' => ['Admin', ['Admin', 'Member'], 'Owner', 403],
+        'member fails admin' => ['Member', ['Member'], 'Admin', 403],
+        'case insensitive' => ['Admin', ['Admin', 'Member'], 'admin', 200],
+        'custom role exact' => ['Billing', ['Billing'], 'Billing', 200],
+        'custom role mismatch' => ['Billing', ['Billing'], 'Support', 403],
+    ]);
 
-    function createPermissionMiddleware(): VerifyPropelAuthPermission
-    {
-        return new VerifyPropelAuthPermission;
-    }
+    test('checks permissions with the permission: prefix', function () {
+        $user = userWithMembership('org1', 'Admin', ['Admin', 'Member'], ['propelauth::can_invite']);
 
-    test('allows request when user has required role', function () {
-        $user = mockUserWithRole('org123', 'owner');
-        $middleware = createPermissionMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('propelauth_org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'member');
-
-        expect($response->getStatusCode())->toBe(200);
+        expect(runPermission($user, 'org1', 'permission:propelauth::can_invite'))->toBe(200)
+            ->and(runPermission($user, 'org1', 'permission:propelauth::can_setup_saml'))->toBe(403);
     });
 
-    test('allows owner to access member routes', function () {
-        $user = mockUserWithRole('org123', 'owner');
-        $middleware = createPermissionMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('propelauth_org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'member');
-
-        expect($response->getStatusCode())->toBe(200);
+    test('rejects a user not in the organisation', function () {
+        expect(runPermission(userWithMembership('org1', 'Owner', ['Owner']), 'org2', 'Member'))->toBe(403);
     });
 
-    test('allows admin to access member routes', function () {
-        $user = mockUserWithRole('org123', 'admin');
-        $middleware = createPermissionMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('propelauth_org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'member');
-
-        expect($response->getStatusCode())->toBe(200);
+    test('rejects a request without a user', function () {
+        expect(runPermission(null, 'org1', 'Member'))->toBe(401);
     });
 
-    test('rejects member accessing admin routes', function () {
-        $user = mockUserWithRole('org123', 'member');
-        $middleware = createPermissionMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('propelauth_org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'admin');
-
-        expect($response->getStatusCode())->toBe(Response::HTTP_FORBIDDEN);
-        $data = json_decode($response->getContent(), true);
-        expect($data['message'])->toContain('does not have required role');
+    test('rejects a request without org context', function () {
+        expect(runPermission(userWithMembership('org1', 'Owner', ['Owner']), null, 'Member'))->toBe(400);
     });
 
-    test('rejects member accessing owner routes', function () {
-        $user = mockUserWithRole('org123', 'member');
-        $middleware = createPermissionMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('propelauth_org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'owner');
-
-        expect($response->getStatusCode())->toBe(Response::HTTP_FORBIDDEN);
-    });
-
-    test('rejects request without authenticated user', function () {
-        $middleware = createPermissionMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'member');
-
-        expect($response->getStatusCode())->toBe(Response::HTTP_UNAUTHORIZED);
-        $data = json_decode($response->getContent(), true);
-        expect($data['message'])->toContain('not authenticated');
-    });
-
-    test('rejects request without org context', function () {
-        $user = mockUserWithRole('org123', 'owner');
-        $middleware = createPermissionMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'member');
-
-        expect($response->getStatusCode())->toBe(Response::HTTP_BAD_REQUEST);
-        $data = json_decode($response->getContent(), true);
-        expect($data['message'])->toContain('Organisation context not found');
-    });
-
-    test('supports custom role names', function () {
-        $user = mockUserWithRole('org123', 'custom_editor');
-        $middleware = createPermissionMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('propelauth_org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'custom_editor');
-
-        expect($response->getStatusCode())->toBe(200);
-    });
-
-    test('rejects custom role when not exact match', function () {
-        $user = mockUserWithRole('org123', 'custom_viewer');
-        $middleware = createPermissionMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('propelauth_org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'custom_editor');
-
-        expect($response->getStatusCode())->toBe(Response::HTTP_FORBIDDEN);
-    });
-
-    test('handles role data as objects', function () {
-        $user = UserData::fromArray([
-            'userId' => 'user123',
-            'email' => 'test@example.com',
-            'emailConfirmed' => true,
-            'firstName' => 'John',
-            'lastName' => 'Doe',
-            'username' => 'johndoe',
-            'pictureUrl' => 'https://example.com/pic.jpg',
-            'properties' => [],
-            'locked' => false,
-            'enabled' => true,
-            'hasPassword' => true,
-            'updatePasswordRequired' => false,
-            'mfaEnabled' => false,
-            'canCreateOrgs' => true,
-            'createdAt' => 1609459200,
-            'lastActiveAt' => 1609459200,
-            'orgs' => [
-                (object) [
-                    'id' => 'org123',
-                    'display_name' => 'Test Org',
-                    'userRole' => 'admin',
+    test('works with a verified access token', function () {
+        $token = AccessToken::fromClaims([
+            'user_id' => 'user123',
+            'exp' => time() + 60,
+            'org_id_to_org_member_info' => [
+                'org1' => [
+                    'org_id' => 'org1',
+                    'org_name' => 'Timberwolves',
+                    'user_role' => 'Admin',
+                    'inherited_user_roles_plus_current_role' => ['Admin', 'Member'],
+                    'user_permissions' => [],
                 ],
             ],
         ]);
 
-        $middleware = createPermissionMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('propelauth_org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'member');
-
-        expect($response->getStatusCode())->toBe(200);
-    });
-
-    test('supports alternative key names', function () {
-        $user = UserData::fromArray([
-            'userId' => 'user123',
-            'email' => 'test@example.com',
-            'emailConfirmed' => true,
-            'firstName' => 'John',
-            'lastName' => 'Doe',
-            'username' => 'johndoe',
-            'pictureUrl' => 'https://example.com/pic.jpg',
-            'properties' => [],
-            'locked' => false,
-            'enabled' => true,
-            'hasPassword' => true,
-            'updatePasswordRequired' => false,
-            'mfaEnabled' => false,
-            'canCreateOrgs' => true,
-            'createdAt' => 1609459200,
-            'lastActiveAt' => 1609459200,
-            'orgs' => [
-                [
-                    'orgId' => 'org123',
-                    'display_name' => 'Test Org',
-                    'role' => 'owner',
-                ],
-            ],
-        ]);
-
-        $middleware = createPermissionMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('propelauth_org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'member');
-
-        expect($response->getStatusCode())->toBe(200);
-    });
-
-    test('handles case insensitive role matching', function () {
-        $user = mockUserWithRole('org123', 'OWNER');
-        $middleware = createPermissionMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('propelauth_org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'member');
-
-        expect($response->getStatusCode())->toBe(200);
-    });
-
-    test('rejects when user not in specified org', function () {
-        $user = UserData::fromArray([
-            'userId' => 'user123',
-            'email' => 'test@example.com',
-            'emailConfirmed' => true,
-            'firstName' => 'John',
-            'lastName' => 'Doe',
-            'username' => 'johndoe',
-            'pictureUrl' => 'https://example.com/pic.jpg',
-            'properties' => [],
-            'locked' => false,
-            'enabled' => true,
-            'hasPassword' => true,
-            'updatePasswordRequired' => false,
-            'mfaEnabled' => false,
-            'canCreateOrgs' => true,
-            'createdAt' => 1609459200,
-            'lastActiveAt' => 1609459200,
-            'orgs' => [
-                [
-                    'id' => 'org999',
-                    'display_name' => 'Other Org',
-                    'user_role' => 'owner',
-                ],
-            ],
-        ]);
-
-        $middleware = createPermissionMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('propelauth_org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'member');
-
-        expect($response->getStatusCode())->toBe(Response::HTTP_FORBIDDEN);
-    });
-
-    test('allows admin to access owner routes (via role hierarchy check)', function () {
-        $user = mockUserWithRole('org123', 'owner');
-        $middleware = createPermissionMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('propelauth_org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'owner');
-
-        expect($response->getStatusCode())->toBe(200);
-    });
-
-    test('rejects admin accessing owner-only routes', function () {
-        $user = mockUserWithRole('org123', 'admin');
-        $middleware = createPermissionMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('propelauth_org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'owner');
-
-        expect($response->getStatusCode())->toBe(Response::HTTP_FORBIDDEN);
+        expect(runPermission($token, 'org1', 'Member'))->toBe(200)
+            ->and(runPermission($token, 'org1', 'Owner'))->toBe(403);
     });
 });
