@@ -8,6 +8,7 @@ use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationData;
 use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
 use LittleGreenMan\Earhart\PropelAuth\SamlSpMetadata;
+use LittleGreenMan\Earhart\PropelAuth\ScimGroup;
 use LittleGreenMan\Earhart\Services\CacheService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 
@@ -348,6 +349,82 @@ class FakeOrganisationService extends OrganisationService
     public function migrateOrgToIsolated(string $orgId): bool
     {
         return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->set($orgId, ['isolated' => true]));
+    }
+
+    public function inviteUserToOrganisationById(string $orgId, string $userId, string $role, array $additionalRoles = []): bool
+    {
+        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($orgId, $userId, $role, $additionalRoles) {
+            if (! isset($this->state->orgs[$orgId], $this->state->users[$userId])) {
+                throw $this->notFound(__FUNCTION__);
+            }
+
+            $this->state->invites[] = [
+                'inviteeEmail' => $this->state->users[$userId]['email'],
+                'orgId' => $orgId,
+                'orgName' => $this->state->orgs[$orgId]['name'],
+                'roleInOrg' => $role,
+                'additionalRolesInOrg' => $additionalRoles,
+                'createdAt' => now()->getTimestamp(),
+                'expiresAt' => now()->addDays(5)->getTimestamp(),
+                'inviterEmail' => null,
+                'inviterUserId' => null,
+            ];
+
+            return true;
+        });
+    }
+
+    public function setOIDCIdPMetadata(
+        string $orgId,
+        string $clientId,
+        string $clientSecret,
+        string $idpType,
+        bool $usesPkce = true,
+        ?string $oktaSsoDomain = null,
+        ?string $entraTenantId = null,
+        ?string $authUrl = null,
+        ?string $tokenUrl = null,
+        ?string $userinfoUrl = null,
+    ): bool {
+        return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->set($orgId, [
+            'isSamlConfigured' => true,
+            'isSamlInTestMode' => true,
+        ]));
+    }
+
+    public function getScimGroups(string $orgId, ?string $userId = null, int $pageSize = 10, int $pageNumber = 0): PaginatedResult
+    {
+        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($orgId, $userId, $pageSize, $pageNumber) {
+            $this->requireOrg($orgId);
+
+            $groups = array_filter(
+                $this->state->scimGroups[$orgId] ?? [],
+                fn (array $group) => $userId === null || in_array($userId, $group['members'], true),
+            );
+
+            $items = array_map(
+                fn (string $groupId, array $group) => new ScimGroup($groupId, $group['displayName'], $group['externalIdFromIdp']),
+                array_keys($groups),
+                $groups,
+            );
+
+            return PaginatedResult::from(
+                $this->state->page($items, $pageNumber, $pageSize),
+                fn (int $nextPage) => $this->getScimGroups($orgId, $userId, $pageSize, $nextPage),
+            );
+        });
+    }
+
+    public function getScimGroup(string $orgId, string $groupId, ?int $membersPageSize = null, ?int $membersPageNumber = null): ScimGroup
+    {
+        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($orgId, $groupId, $membersPageSize, $membersPageNumber) {
+            $group = $this->state->scimGroups[$orgId][$groupId] ?? throw InvalidOrgException::notFound($orgId);
+            $members = $membersPageSize === null
+                ? $group['members']
+                : array_slice($group['members'], ($membersPageNumber ?? 0) * $membersPageSize, $membersPageSize);
+
+            return new ScimGroup($groupId, $group['displayName'], $group['externalIdFromIdp'], $members);
+        });
     }
 
     protected function requireOrg(string $orgId): void

@@ -5,14 +5,21 @@ namespace LittleGreenMan\Earhart\Tests\Unit\Testing;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use LittleGreenMan\Earhart\Earhart;
+use LittleGreenMan\Earhart\Exceptions\InvalidApiKeyException;
 use LittleGreenMan\Earhart\Exceptions\InvalidOrgException;
 use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
 use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\Exceptions\RateLimitException;
+use LittleGreenMan\Earhart\Exceptions\StepUpMfaException;
 use LittleGreenMan\Earhart\Exceptions\UnauthorizedException;
 use LittleGreenMan\Earhart\Exceptions\ValidationException;
 use LittleGreenMan\Earhart\Facades\PropelAuth;
+use LittleGreenMan\Earhart\Middleware\VerifyPropelAuthApiKey;
 use LittleGreenMan\Earhart\Middleware\VerifyPropelAuthUser;
+use LittleGreenMan\Earhart\PropelAuth\Insights\ChartMetric;
+use LittleGreenMan\Earhart\PropelAuth\Insights\OrgReportType;
+use LittleGreenMan\Earhart\PropelAuth\Insights\UserReportType;
+use LittleGreenMan\Earhart\Services\MfaService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 use LittleGreenMan\Earhart\Services\UserService;
 use LittleGreenMan\Earhart\Testing\EarhartFake;
@@ -257,5 +264,144 @@ describe('assertions', function () {
         PropelAuth::getUser($user->userId);
 
         Http::assertNothingSent();
+    });
+});
+
+describe('3.1 endpoints', function () {
+    test('batch fetch, can create orgs, tokens and employees', function () {
+        $fake = Earhart::fake();
+        $a = $fake->addUser(['email' => 'a@example.com', 'username' => 'a']);
+        $b = $fake->addUser(['email' => 'b@example.com']);
+        $fake->addOAuthToken($a->userId, 'google', 'ya29')->addEmployee('e1', 'staff@propelauth.com');
+
+        PropelAuth::users()->enableCanCreateOrgs($a->userId);
+
+        expect(array_keys(PropelAuth::users()->getUsersByIds([$a->userId, 'missing', $b->userId])))->toBe([$a->userId, $b->userId])
+            ->and(array_keys(PropelAuth::users()->getUsersByEmails(['b@example.com'])))->toBe(['b@example.com'])
+            ->and(PropelAuth::getUser($a->userId)->canCreateOrgs)->toBeTrue()
+            ->and(PropelAuth::users()->getOAuthTokens($a->userId)['google']->accessToken)->toBe('ya29')
+            ->and(PropelAuth::users()->getFreshOAuthToken($a->userId, 'google')->accessToken)->toBe('ya29')
+            ->and(PropelAuth::users()->getEmployeeEmail('e1'))->toBe('staff@propelauth.com');
+
+        $fake->assertCalled('enableCanCreateOrgs', fn ($args) => $args['userId'] === $a->userId);
+    });
+
+    test('invite by ID, OIDC and SCIM groups', function () {
+        $fake = Earhart::fake();
+        $user = $fake->addUser(['email' => 'a@example.com']);
+        $org = $fake->addOrganisation();
+        $groupId = $fake->addScimGroup($org->orgId, 'Engineering', [$user->userId]);
+        $fake->addScimGroup($org->orgId, 'Sales');
+
+        PropelAuth::organisations()->inviteUserToOrganisationById($org->orgId, $user->userId, 'Member');
+        PropelAuth::organisations()->setOIDCIdPMetadata($org->orgId, 'cid', 'secret', 'Okta', oktaSsoDomain: 'x.okta.com');
+
+        expect(PropelAuth::organisations()->getPendingInvites($org->orgId)->items[0]['inviteeEmail'])->toBe('a@example.com')
+            ->and(PropelAuth::getOrganisation($org->orgId)->isSamlConfigured)->toBeTrue()
+            ->and(PropelAuth::organisations()->getScimGroups($org->orgId)->totalItems)->toBe(2)
+            ->and(PropelAuth::organisations()->getScimGroups($org->orgId, $user->userId)->items[0]->groupId)->toBe($groupId)
+            ->and(PropelAuth::organisations()->getScimGroup($org->orgId, $groupId)->memberUserIds)->toBe([$user->userId]);
+    });
+
+    test('step-up MFA with TOTP and SMS', function () {
+        $fake = Earhart::fake();
+        $totpUser = $fake->addUser();
+        $smsUser = $fake->addUser();
+        $fake->withMfa($totpUser->userId)->withMfa($smsUser->userId, ['p1' => '1234']);
+
+        $grant = PropelAuth::mfa()->verifyTotp($totpUser->userId, '123456', 'DELETE_ACCOUNT');
+
+        expect(PropelAuth::mfa()->verifyGrant($totpUser->userId, 'DELETE_ACCOUNT', $grant))->toBeTrue()
+            ->and(PropelAuth::mfa()->verifyGrant($totpUser->userId, 'DELETE_ACCOUNT', $grant))->toBeFalse()
+            ->and(fn () => PropelAuth::mfa()->verifyTotp($totpUser->userId, '000000', 'DELETE_ACCOUNT'))
+            ->toThrow(StepUpMfaException::class)
+            ->and(fn () => PropelAuth::mfa()->verifyTotp($smsUser->userId, '123456', 'DELETE_ACCOUNT'))
+            ->toThrow(StepUpMfaException::class);
+
+        $challenge = PropelAuth::mfa()->sendSmsCode($smsUser->userId, 'p1', 'EXPORT');
+        $smsGrant = PropelAuth::mfa()->verifySmsCode($smsUser->userId, $challenge, '123456');
+
+        expect(PropelAuth::mfa()->getUserMfaMethods($smsUser->userId)->phoneNumbers)->toBe(['p1' => '1234'])
+            ->and(PropelAuth::mfa()->verifyGrant($smsUser->userId, 'EXPORT', $smsGrant))->toBeTrue()
+            ->and(app(MfaService::class))->toBe($fake->mfa());
+    });
+});
+
+describe('API keys', function () {
+    test('create, validate, list, update, delete and usage', function () {
+        $fake = Earhart::fake();
+        $user = $fake->addUser();
+        $org = $fake->addOrganisation(members: [$user->userId => 'Admin']);
+
+        $personal = PropelAuth::apiKeys()->createApiKey(userId: $user->userId, displayName: 'CLI');
+        $orgKey = $fake->addApiKey(userId: $user->userId, orgId: $org->orgId);
+
+        $validation = PropelAuth::apiKeys()->validateApiKey('Bearer '.$personal->apiKeyToken);
+        $orgValidation = PropelAuth::apiKeys()->validateOrgApiKey($orgKey->apiKeyToken);
+
+        expect($validation->isPersonal())->toBeTrue()
+            ->and($validation->user->userId)->toBe($user->userId)
+            ->and($orgValidation->org->orgId)->toBe($org->orgId)
+            ->and($orgValidation->userInOrg->userRole)->toBe('Admin')
+            ->and(fn () => PropelAuth::apiKeys()->validatePersonalApiKey($orgKey->apiKeyToken))->toThrow(InvalidApiKeyException::class)
+            ->and(PropelAuth::apiKeys()->getActiveApiKeys(userId: $user->userId)->totalItems)->toBe(2)
+            ->and(PropelAuth::apiKeys()->getApiKeyUsage(now(), $personal->apiKeyId))->toBe(1);
+
+        PropelAuth::apiKeys()->updateApiKey($personal->apiKeyId, metadata: ['scope' => 'read']);
+        PropelAuth::apiKeys()->deleteApiKey($personal->apiKeyId);
+
+        expect(PropelAuth::apiKeys()->getApiKey($personal->apiKeyId)->metadata)->toBe(['scope' => 'read'])
+            ->and(fn () => PropelAuth::apiKeys()->validateApiKey($personal->apiKeyToken))->toThrow(InvalidApiKeyException::class)
+            ->and(PropelAuth::apiKeys()->getArchivedApiKeys(userId: $user->userId)->items[0]->apiKeyId)->toBe($personal->apiKeyId);
+
+        $fake->assertApiKeyCreated(userId: $user->userId)->assertApiKeyDeleted($personal->apiKeyId);
+    });
+
+    test('expired and imported keys', function () {
+        $fake = Earhart::fake();
+        $user = $fake->addUser();
+        $expired = $fake->addApiKey(userId: $user->userId, expiresAt: now()->subMinute());
+
+        PropelAuth::apiKeys()->importApiKey('legacy-secret', userId: $user->userId);
+
+        expect(fn () => PropelAuth::apiKeys()->validateApiKey($expired->apiKeyToken))->toThrow(InvalidApiKeyException::class)
+            ->and(PropelAuth::apiKeys()->validateImportedApiKey('legacy-secret')->user->userId)->toBe($user->userId)
+            ->and(fn () => PropelAuth::apiKeys()->validateApiKey('legacy-secret'))->toThrow(InvalidApiKeyException::class);
+    });
+
+    test('the middleware works with the fake', function () {
+        $fake = Earhart::fake();
+        $user = $fake->addUser();
+        $key = $fake->addApiKey(userId: $user->userId);
+
+        $request = Request::create('/');
+        $request->headers->set('Authorization', "Bearer {$key->apiKeyToken}");
+
+        $response = app(VerifyPropelAuthApiKey::class)->handle($request, fn () => response('OK'), 'personal');
+
+        expect($response->getStatusCode())->toBe(200)
+            ->and($request->attributes->get('propelauth_user')->userId)->toBe($user->userId);
+    });
+});
+
+describe('insights', function () {
+    test('returns seeded reports and metrics', function () {
+        $fake = Earhart::fake()
+            ->withUserReport(UserReportType::TopInviter, [
+                ['userId' => 'u1', 'email' => 'a@example.com', 'extraProperties' => ['num_invites' => 4]],
+            ])
+            ->withOrgReport(OrgReportType::Growth, [['orgId' => 'o1', 'name' => 'Acme', 'numUsers' => 12]])
+            ->withChartMetrics(ChartMetric::Signups, ['2026-01-02' => 5, '2026-01-01' => 3, '2026-02-01' => 9]);
+
+        $users = PropelAuth::insights()->getUserReport(UserReportType::TopInviter, 30);
+        $orgs = PropelAuth::insights()->getOrgReport(OrgReportType::Growth);
+        $chart = PropelAuth::insights()->getChartMetrics(ChartMetric::Signups, startDate: '2026-01-01', endDate: '2026-01-31');
+
+        expect($users->items[0]->extraProperties)->toBe(['num_invites' => 4])
+            ->and($orgs->items[0]->numUsers)->toBe(12)
+            ->and($chart->toArray())->toBe(['2026-01-01' => 3, '2026-01-02' => 5])
+            ->and(fn () => PropelAuth::insights()->getUserReport(UserReportType::Churn, 90))->toThrow(\InvalidArgumentException::class);
+
+        $fake->assertCalled('getUserReport', fn ($args) => $args['type'] === UserReportType::TopInviter);
     });
 });

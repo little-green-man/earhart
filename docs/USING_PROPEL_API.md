@@ -45,6 +45,9 @@ echo $user->emailConfirmed;  // true
   - [Managing Organization Members](#managing-organization-members)
   - [Organization Roles](#organization-roles)
   - [SAML Configuration](#saml-configuration)
+- [Step-Up MFA](#step-up-mfa)
+- [End-User API Keys](#end-user-api-keys)
+- [Insights](#insights)
 - [Pagination & Data Handling](#pagination--data-handling)
 - [Caching](#caching)
 - [Error Handling](#error-handling)
@@ -166,6 +169,17 @@ try {
 } catch (InvalidUserException $e) {
     echo "No user found with that username";
 }
+```
+
+#### Fetch Several Users at Once
+
+```php
+// One request; unknown IDs are left out. Keyed by user ID, email or username.
+$users = app('earhart')->users()->getUsersByIds(['user_1', 'user_2'], includeOrgs: true);
+$users = app('earhart')->users()->getUsersByEmails(['a@example.com', 'b@example.com']);
+$users = app('earhart')->users()->getUsersByUsernames(['ant', 'bea']);
+
+$users['user_1']->email;
 ```
 
 #### Query Users with Filters
@@ -418,6 +432,44 @@ $params = app('earhart')->getUserSignupParams('user_id_here');
 // Example: ['utm_source' => 'google', 'utm_campaign' => 'summer2024']
 ```
 
+#### Allow or Stop Creating Organisations
+
+```php
+app('earhart')->users()->enableCanCreateOrgs('user_id_here');
+app('earhart')->users()->disableCanCreateOrgs('user_id_here');
+```
+
+### Social Login Tokens
+
+> **API Reference**: [Social Login APIs](https://docs.propelauth.com/reference/api/social-login)
+
+PropelAuth keeps the OAuth tokens from a user's social logins, so you can call the provider's API on their behalf.
+
+```php
+$tokens = app('earhart')->users()->getOAuthTokens('user_id_here'); // Keyed by provider
+
+if (isset($tokens['google'])) {
+    $tokens['google']->accessToken;
+    $tokens['google']->authorizedScopes;
+    $tokens['google']->isExpired();
+}
+
+// Have PropelAuth refresh the token first
+$token = app('earhart')->users()->getFreshOAuthToken('user_id_here', 'google');
+```
+
+### PropelAuth Team Members
+
+When one of your team impersonates a user, the session's `impersonatorUserId` is their employee ID:
+
+```php
+$token = app('earhart')->verifyAccessToken($bearer);
+
+if ($token->isImpersonated()) {
+    $email = app('earhart')->users()->getEmployeeEmail($token->impersonatorUserId);
+}
+```
+
 ## Organisation Management
 
 > **PropelAuth Organisation API Reference**: [https://docs.propelauth.com/reference/api/org](https://docs.propelauth.com/reference/api/org)
@@ -578,6 +630,16 @@ app('earhart')->organisations()->inviteUserToOrganisation(
 );
 ```
 
+#### Invite an Existing User by ID
+
+```php
+app('earhart')->organisations()->inviteUserToOrganisationById(
+    orgId: 'org_id_here',
+    userId: 'user_id_here',
+    role: 'Member',
+);
+```
+
 #### Remove User from Organisation
 
 > **API Reference**: [Remove User from Org](https://docs.propelauth.com/reference/api/org#remove-user-from-org)
@@ -697,6 +759,24 @@ app('earhart')->organisations()->setSAMLIdPMetadata(
 );
 ```
 
+#### Set OIDC IdP Metadata
+
+For SSO through an OIDC identity provider instead of SAML:
+
+```php
+// Okta
+app('earhart')->organisations()->setOIDCIdPMetadata(
+    orgId: 'org_id_here',
+    clientId: '0oaulhbkt9YBiT3Pn697',
+    clientSecret: $secret,
+    idpType: 'Okta',
+    oktaSsoDomain: 'example.okta.com',
+);
+
+// Microsoft Entra: idpType 'Azure' with entraTenantId
+// Any other provider: idpType 'Generic' with authUrl, tokenUrl and userinfoUrl
+```
+
 #### Enable SAML Connection
 
 ```php
@@ -716,6 +796,25 @@ app('earhart')->organisations()->deleteSAMLConnection('org_id_here');
 app('earhart')->organisations()->disallowOrgToSetupSAML('org_id_here');
 ```
 
+### SCIM Groups
+
+> **API Reference**: [Fetch Org SCIM Groups](https://docs.propelauth.com/reference/api/enterprise-sso)
+
+Groups an organisation's identity provider has provisioned over SCIM:
+
+```php
+// All groups, or only those a user belongs to
+$groups = app('earhart')->organisations()->getScimGroups('org_id_here', userId: 'user_id_here');
+
+foreach ($groups->allPages() as $group) {
+    echo "{$group->displayName} ({$group->externalIdFromIdp})\n";
+}
+
+// One group with its members
+$group = app('earhart')->organisations()->getScimGroup('org_id_here', 'group_id_here');
+$group->memberUserIds;
+```
+
 ### Organisation Isolation
 
 #### Migrate Organisation to Isolated
@@ -731,6 +830,147 @@ app('earhart')->organisations()->migrateOrgToIsolated('org_id_here');
 **Note**: This is a one-way operation and cannot be reversed.
 
 **Use cases**: B2B SaaS with complete data isolation, enterprise customers requiring dedicated tenancy, or regulatory compliance (HIPAA, SOC2).
+
+## Step-Up MFA
+
+> **API Reference**: [Step-Up MFA APIs](https://docs.propelauth.com/reference/api/mfa)
+
+Ask a signed-in user for a fresh MFA code before a sensitive action. Verifying a code gives a grant; check the grant where the action happens. The action type is your own label and must match.
+
+```php
+use LittleGreenMan\Earhart\Exceptions\StepUpMfaException;
+use LittleGreenMan\Earhart\PropelAuth\StepUpGrantType;
+
+$mfa = app('earhart')->mfa();
+$setup = $mfa->getUserMfaMethods($userId); // null if the user has no MFA
+
+try {
+    if ($setup->usesTotp()) {
+        $grant = $mfa->verifyTotp($userId, $request->input('code'), 'DELETE_ACCOUNT');
+    } else {
+        // Send a code to one of the user's numbers, then verify it
+        $challengeId = $mfa->sendSmsCode($userId, array_key_first($setup->phoneNumbers), 'DELETE_ACCOUNT');
+        $grant = $mfa->verifySmsCode($userId, $challengeId, $request->input('code'));
+    }
+} catch (StepUpMfaException $e) {
+    if ($e->isIncorrectCode()) {
+        return back()->withErrors(['code' => 'That code is not right']);
+    }
+
+    throw $e;
+}
+
+// Later, where the action happens. A one-time grant is used up here.
+if (! $mfa->verifyGrant($userId, 'DELETE_ACCOUNT', $grant)) {
+    abort(403);
+}
+```
+
+Grants are one-time by default and valid for 300 seconds. Pass `grantType: StepUpGrantType::TimeBased` and `validForSeconds` to allow several actions within a window. If step-up MFA isn't on your PropelAuth plan, calls throw `FeatureNotEnabledException`.
+
+## End-User API Keys
+
+> **API Reference**: [API Key APIs](https://docs.propelauth.com/reference/api/apikey)
+
+API keys your users create to call your API. They belong to a user (personal), an organisation, or a user within an organisation. These are separate from the PropelAuth API key Earhart uses.
+
+### Protecting Routes
+
+```php
+use LittleGreenMan\Earhart\Middleware\VerifyPropelAuthApiKey;
+use LittleGreenMan\Earhart\Middleware\VerifyPropelAuthPermission;
+
+Route::middleware(VerifyPropelAuthApiKey::class)->get('/api/reports', ...);              // Any key
+Route::middleware(VerifyPropelAuthApiKey::class.':personal')->get('/api/me', ...);       // Personal keys only
+Route::middleware([
+    VerifyPropelAuthApiKey::class.':org',
+    VerifyPropelAuthPermission::class.':Admin',                                         // The key's user must be an Admin
+])->post('/api/settings', ...);
+```
+
+The middleware reads `Authorization: Bearer <key>`, and sets `propelauth_api_key`, `propelauth_user` and `propelauth_org_id` on the request. An invalid key gets 401. A key over the rate limit you set for it in PropelAuth gets 429 with a `Retry-After` header.
+
+### Validating Keys Yourself
+
+```php
+use LittleGreenMan\Earhart\Exceptions\ApiKeyRateLimitException;
+use LittleGreenMan\Earhart\Exceptions\InvalidApiKeyException;
+
+try {
+    $key = app('earhart')->apiKeys()->validateApiKey($request->bearerToken());
+
+    $key->isPersonal();   // or isOrg()
+    $key->user;           // UserData, with memberships
+    $key->org;            // OrganisationData, for org keys
+    $key->userInOrg;      // OrgMemberInfo: the user's role in that org
+    $key->metadata;       // What you stored with the key
+} catch (InvalidApiKeyException $e) {
+    abort(401);
+} catch (ApiKeyRateLimitException $e) {
+    abort(429, $e->userFacingError ?? 'Too many requests');
+}
+```
+
+`validatePersonalApiKey()` and `validateOrgApiKey()` also check the kind of key. A key-specific rate limit is never retried, unlike Earhart's own `RateLimitException`.
+
+### Managing Keys
+
+```php
+$keys = app('earhart')->apiKeys();
+
+// Create: show $new->apiKeyToken to the owner once; it can't be fetched again
+$new = $keys->createApiKey(userId: $userId, orgId: $orgId, expiresAt: now()->addYear(), metadata: ['scope' => 'read'], displayName: 'CI');
+
+$key = $keys->getApiKey($new->apiKeyId);                       // ApiKey: owner, expiry, metadata
+$active = $keys->getActiveApiKeys(userId: $userId);              // Paginated ApiKey items; also orgId, userEmail
+$archived = $keys->getArchivedApiKeys(orgId: $orgId);            // Expired and deleted keys
+
+$keys->updateApiKey($new->apiKeyId, metadata: ['scope' => 'write']);
+$keys->updateApiKey($new->apiKeyId, neverExpire: true);
+$keys->deleteApiKey($new->apiKeyId);
+
+$count = $keys->getApiKeyUsage(today(), apiKeyId: $new->apiKeyId); // Validations that day
+
+// Bring over keys from another system so they keep working
+$apiKeyId = $keys->importApiKey($legacySecret, userId: $userId);
+$keys->validateImportedApiKey($legacySecret);
+```
+
+## Insights
+
+> **API Reference**: [User and Org Insights](https://docs.propelauth.com/reference/api/insights)
+
+PropelAuth's reports on user and organisation activity, and chart metrics.
+
+```php
+use LittleGreenMan\Earhart\PropelAuth\Insights\ChartCadence;
+use LittleGreenMan\Earhart\PropelAuth\Insights\ChartMetric;
+use LittleGreenMan\Earhart\PropelAuth\Insights\OrgReportType;
+use LittleGreenMan\Earhart\PropelAuth\Insights\UserReportType;
+
+$insights = app('earhart')->insights();
+
+// User reports: Reengagement, Churn, TopInviter, Champion
+$report = $insights->getUserReport(UserReportType::TopInviter, interval: 30);
+
+$report->reportTime;                       // When PropelAuth generated it
+foreach ($report->allPages() as $user) {   // UserReportRecord
+    echo "{$user->email}: {$user->extraProperties['num_invites']}\n";
+    $user->orgs;                           // [['orgId', 'displayName', 'userRole'], ...]
+}
+
+// Organisation reports: Reengagement, Churn, Growth, Attrition
+$report = $insights->getOrgReport(OrgReportType::Growth, interval: 90, pageSize: 25);
+$report->items[0]->name;                   // OrgReportRecord
+$report->items[0]->numUsers;
+
+// Chart metrics: Signups, OrgsCreated, ActiveUsers, ActiveOrgs
+$chart = $insights->getChartMetrics(ChartMetric::Signups, ChartCadence::Weekly, now()->subMonths(3), now());
+$chart->toArray();                         // ['2026-07-06' => 42, ...]
+$chart->points;                            // Each with date, result and cadenceCompleted (false while in progress)
+```
+
+Each report takes its own intervals, listed by `$type->intervals()`: `Weekly` or `Monthly` for re-engagement, 7, 14 or 30 days for churn, and 30, 60 or 90 days otherwise. An interval a report doesn't offer throws `InvalidArgumentException` before any request is made. Leave it out for PropelAuth's default.
 
 ## Pagination & Data Handling
 
@@ -844,6 +1084,9 @@ Every API failure throws a `PropelAuthException` or one of its subclasses. Each 
 | `RateLimitException` | 429 after retries are used up. `$retryAfterSeconds` holds the wait |
 | `InvalidTokenException` | An access token is malformed, expired, or from another environment |
 | `FeatureNotEnabledException` | 426: the feature isn't enabled for the project (organisation calls need B2B support) |
+| `StepUpMfaException` | A step-up MFA code was wrong, or the user has no MFA of that kind |
+| `InvalidApiKeyException` | An end-user API key is invalid, expired, deleted or the wrong kind |
+| `ApiKeyRateLimitException` | An end-user API key hit the rate limit set for it in PropelAuth (not retried) |
 | `PropelAuthException` | Anything else, including a 404 on calls naming both a user and an organisation |
 
 Write methods return `true` on success and throw on failure, so a missing user or organisation never passes silently.
@@ -957,6 +1200,21 @@ $token = $fake->issueToken($user->userId); // Accepted by validateToken(), verif
 $fake->withRolePermissions(['Admin' => ['propelauth::can_invite']]); // Roles default to Owner > Admin > Member
 ```
 
+Also for the newer endpoints:
+
+```php
+$fake->addOAuthToken($user->userId, 'google', 'access-token');
+$fake->addEmployee('employee_id', 'staff@example.com');
+$groupId = $fake->addScimGroup($org->orgId, 'Engineering', [$user->userId]);
+$fake->withMfa($user->userId);                      // Authenticator app
+$fake->withMfa($user->userId, ['phone_id' => '1234']); // SMS, numbers keyed by MFA phone ID
+$fake->withValidMfaCode('654321');                  // Defaults to 123456
+$key = $fake->addApiKey(userId: $user->userId);     // Use $key->apiKeyToken in requests
+$fake->withUserReport(UserReportType::TopInviter, [['userId' => 'u1', 'email' => 'a@example.com']]);
+$fake->withOrgReport(OrgReportType::Growth, [['orgId' => 'o1', 'name' => 'Acme', 'numUsers' => 12]]);
+$fake->withChartMetrics(ChartMetric::Signups, ['2026-01-01' => 3, '2026-01-02' => 5]);
+```
+
 Seeding is not recorded as a call.
 
 ### Behaviour
@@ -966,7 +1224,7 @@ The fake keeps state: `disableUser()` sets `enabled` to `false`, `deleteUser()` 
 ### Scripting failures
 
 ```php
-$fake->failNext(UserService::class, 500);           // Next UserService call throws PropelAuthException (500)
+$fake->failNext(UserService::class, 500);           // Next UserService call throws PropelAuthException (500); MfaService::class works too
 $fake->failNext('deleteUser', 429);                 // Next deleteUser() throws RateLimitException
 $fake->failNext('getUser', 403, times: 2);          // Next two getUser() calls throw UnauthorizedException
 $fake->failNext('getUser', InvalidUserException::notFound('x')); // Throw a specific exception
@@ -991,6 +1249,8 @@ $fake->assertOrganisationDeleted($orgId);
 $fake->assertUserAddedToOrganisation($orgId, $userId, 'Admin');
 $fake->assertUserRemovedFromOrganisation($orgId, $userId);
 $fake->assertUserInvitedToOrganisation($orgId, 'new@example.com');
+$fake->assertApiKeyCreated(userId: $userId);
+$fake->assertApiKeyDeleted($apiKeyId);
 
 // Any method, with its named arguments
 $fake->assertCalled('createAccessToken', fn (array $args) => $args['durationInMinutes'] === 5);
@@ -1149,107 +1409,25 @@ protected function schedule(Schedule $schedule)
 
 ## Missing Features & Limitations
 
-Some PropelAuth API features aren't yet implemented in Earhart:
+Earhart covers every PropelAuth backend API endpoint. Not included:
 
-### User API Limitations
+- **Social login redirects and account linking**: these are browser flows; use the Socialite provider for login.
+- **OAuth2 and MCP authorisation servers**: also browser and OAuth-client flows, outside a backend API client.
 
-1. **Isolated Org Support**: The `isolatedOrgId` parameter isn't supported in:
-   - `getUserByEmail()`
-   - `getUserByUsername()`
-   - `queryUsers()`
+### Calling Other Endpoints
 
-2. **Legacy User ID Filtering**: `queryUsers()` doesn't support `legacyUserId` filtering
-
-3. **Create User Options**: Missing parameters:
-   - `ignoreDomainRestrictions`
-   - `emailConfirmed`
-   - `sendEmailToConfirmEmailAddress`
-
-4. **Employee API**: Cannot fetch employee information (used for impersonation tracking)
-   - Missing: `fetchEmployeeById()`
-
-5. **OAuth Tokens**: Cannot fetch OAuth tokens from social login providers
-   - Missing: Fetch user OAuth tokens endpoint
-
-### Organisation API Limitations
-
-1. **Create Organization**: Missing parameters:
-   - `domain`
-   - `enableAutoJoiningByDomain` (domain auto-join)
-   - `membersMustHaveMatchingDomain` (domain restrictions)
-   - `maxUsers`
-   - `customRoleMappingName`
-   - `legacyOrgId`
-
-2. **Update Organization**: Missing parameters:
-   - `domain`
-   - `extraDomains`
-   - `enableAutoJoiningByDomain`
-   - `membersMustHaveMatchingDomain`
-   - `maxUsers`
-   - `canSetupSaml`
-   - `legacyOrgId`
-   - `ssoTrustLevel`
-
-3. **Query Organizations**: Missing filter parameters:
-   - `legacyOrgId`
-   - `name` (search by name)
-   - `domain` (search by domain)
-
-4. **Get Organization Users**: Missing parameters:
-   - `role` (filter by role)
-   - `pageNumber` (only pageSize is supported)
-
-5. **Invite User by User ID**: Not implemented
-   - Missing: `inviteUserToOrgByUserId()`
-
-6. **Change User Role**: Missing `additionalRoles` parameter
-
-### API Key Management (Not Implemented)
-
-> **API Reference**: [API Key Reference](https://docs.propelauth.com/reference/api/apikey)
-
-The entire API Key management system for end-user/M2M keys isn't yet implemented:
-- `validateApiKey()` - Validate user/org API keys
-- `validatePersonalApiKey()` - Validate personal API keys
-- `validateOrgApiKey()` - Validate organization API keys
-- `createApiKey()` - Create API keys for users/orgs
-- `updateApiKey()` - Update API key metadata/expiration
-- `deleteApiKey()` - Delete/archive API keys
-- `fetchApiKey()` - Fetch API key by ID
-- `fetchCurrentApiKeys()` - List active API keys
-- `fetchArchivedApiKeys()` - List expired/archived API keys
-- `fetchApiKeyUsage()` - Get API key usage statistics
-- `importApiKey()` - Import API keys from external systems
-- `validateImportedApiKey()` - Validate imported API keys
-
-**Note**: These are separate from your PropelAuth API key used for backend integration. These endpoints manage API keys created by your end users.
-
-### Social Login & OAuth
-
-Not yet implemented:
-- Social login redirect URL generation
-- Social account linking
-- Fetching OAuth tokens from providers
-
-### Workarounds
-
-For missing features, make direct HTTP requests to the PropelAuth API:
+If PropelAuth adds an endpoint before Earhart does, a subclass can use `makeRequest()`, which handles authentication, retries, errors and case conversion:
 
 ```php
-use Illuminate\Support\Facades\Http;
+use LittleGreenMan\Earhart\Services\UserService;
 
-// Example: Create org with domain restrictions
-$response = Http::withToken(config('services.propelauth.api_key'))
-    ->post(config('services.propelauth.auth_url') . '/api/backend/v1/org/', [
-        'name' => 'Acme Inc',
-        'domain' => 'acme.com',
-        'enableAutoJoiningByDomain' => true,
-        'membersMustHaveMatchingDomain' => true,
-        'maxUsers' => 100,
-    ]);
-
-$orgId = $response->json()['orgId'];
+class AppUserService extends UserService
+{
+    public function newEndpoint(string $userId): array
+    {
+        return $this->makeRequest('GET', "/api/backend/v1/user/{$userId}/new_endpoint");
+    }
+}
 ```
 
 ### Feature Requests

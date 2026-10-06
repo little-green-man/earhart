@@ -35,6 +35,42 @@ class FakeState
     /** @var array<string, list<string>> Permissions keyed by role */
     public array $rolePermissions = [];
 
+    /** @var array<string, array<string, array<string, mixed>>> Social login tokens keyed by user ID, then provider */
+    public array $oauthTokens = [];
+
+    /** @var array<string, string> PropelAuth team member emails keyed by employee ID */
+    public array $employees = [];
+
+    /** @var array<string, array<string, array{displayName: string, externalIdFromIdp: ?string, members: list<string>}>> Keyed by org ID, then group ID */
+    public array $scimGroups = [];
+
+    /** @var array<string, array{type: string, phoneNumbers: array<string, string>}> MFA setups keyed by user ID */
+    public array $mfa = [];
+
+    /** The code the fake accepts for TOTP and SMS step-up checks */
+    public string $validMfaCode = '123456';
+
+    /** @var array<string, array{userId: string, actionType: string, grantType: string, validForSeconds: int}> Keyed by challenge ID */
+    public array $smsChallenges = [];
+
+    /** @var array<string, array{userId: string, actionType: string, oneTimeUse: bool, expiresAt: int}> Keyed by grant */
+    public array $grants = [];
+
+    /** @var array<string, array{token: string, userId: ?string, orgId: ?string, expiresAt: ?int, metadata: ?array<string, mixed>, displayName: ?string, createdAt: int, archived: bool, imported: bool}> End-user API keys keyed by ID */
+    public array $apiKeys = [];
+
+    /** @var array<string, array<string, int>> Validation counts keyed by Y-m-d date, then API key ID */
+    public array $apiKeyUsage = [];
+
+    /** @var array<string, list<array<string, mixed>>> User report records (camelCase) keyed by report type */
+    public array $userReports = [];
+
+    /** @var array<string, list<array<string, mixed>>> Organisation report records (camelCase) keyed by report type */
+    public array $orgReports = [];
+
+    /** @var array<string, array<string, int>> Chart results keyed by metric, then Y-m-d date */
+    public array $chartMetrics = [];
+
     /** @var array<string, string> User IDs keyed by access token */
     public array $tokens = [];
 

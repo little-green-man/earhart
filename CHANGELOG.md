@@ -2,6 +2,34 @@
 
 All notable changes to `earhart` will be documented in this file.
 
+## [3.1.1] - 2026-10-07
+
+### Added
+
+- Insights: new `InsightsService` (`Earhart::insights()`) with `getUserReport()` (re-engagement, churn, top inviter, champion), `getOrgReport()` (re-engagement, churn, growth, attrition) and `getChartMetrics()` (signups, organisations created, active users, active organisations). Reports return `Report` pages of `UserReportRecord` or `OrgReportRecord`; charts return `ChartData`. Intervals are checked against each report's allowed values before any request
+- `EarhartFake` covers insights, with `withUserReport()`, `withOrgReport()` and `withChartMetrics()`
+
+### Changed
+
+- Keys inside a report's `extra_properties` (e.g. `num_invites`) keep PropelAuth's snake_case
+
+## [3.1.0] - 2026-10-06
+
+### Added
+
+- Batch user fetch: `getUsersByIds()`, `getUsersByEmails()` and `getUsersByUsernames()`, one request each, keyed by ID, email or username
+- `enableCanCreateOrgs()` and `disableCanCreateOrgs()`
+- Social login tokens: `getOAuthTokens()` and `getFreshOAuthToken()`, returning `SocialLoginToken`
+- `getEmployeeEmail()`, e.g. to name the PropelAuth team member behind an impersonated session
+- `inviteUserToOrganisationById()`
+- `setOIDCIdPMetadata()` for SSO through Okta, Microsoft Entra or a generic OIDC provider
+- SCIM groups: `getScimGroups()` (paginated, optionally for one user) and `getScimGroup()` with members, returning `ScimGroup`
+- Step-up MFA: new `MfaService` (`Earhart::mfa()`) with `getUserMfaMethods()`, `verifyTotp()`, `sendSmsCode()`, `verifySmsCode()` and `verifyGrant()`; `StepUpGrantType`; `StepUpMfaException` for PropelAuth's MFA error codes
+- End-user API keys: new `ApiKeyService` (`Earhart::apiKeys()`) covering create, import, fetch, list active and archived, update, delete, validate (any, personal, org, imported) and usage; `ApiKey`, `NewApiKey` and `ApiKeyValidation`; `InvalidApiKeyException`; `ApiKeyRateLimitException` for a key's own rate limit, which is never retried
+- `VerifyPropelAuthApiKey` middleware, optionally requiring a personal or org key, which sets the request's user and org for `VerifyPropelAuthPermission`
+- `PATCH` support in `BaseApiService`
+- `EarhartFake` covers all of the above, with `addOAuthToken()`, `addEmployee()`, `addScimGroup()`, `withMfa()`, `withValidMfaCode()` and `addApiKey()`, plus `assertApiKeyCreated()` and `assertApiKeyDeleted()`
+
 ## [3.0.0] - 2026-10-06
 
 Contains breaking changes. See [UPGRADE-3.0.md](UPGRADE-3.0.md).

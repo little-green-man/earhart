@@ -43,7 +43,7 @@ class OrgMemberInfo
             orgId: $get('org_id', 'orgId'),
             orgName: $get('org_name', 'orgName', ''),
             userRole: $get('user_role', 'userRole', ''),
-            inheritedRoles: $get('inherited_user_roles_plus_current_role', 'inheritedRoles', []),
+            inheritedRoles: $data['inherited_user_roles_plus_current_role'] ?? $data['inheritedUserRolesPlusCurrentRole'] ?? $data['inheritedRoles'] ?? [],
             userPermissions: $get('user_permissions', 'userPermissions', []),
             additionalRoles: $get('additional_roles', 'additionalRoles', []),
             orgMetadata: $get('org_metadata', 'orgMetadata', []) ?? [],

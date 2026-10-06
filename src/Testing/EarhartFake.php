@@ -2,11 +2,19 @@
 
 namespace LittleGreenMan\Earhart\Testing;
 
+use Illuminate\Support\Str;
 use LittleGreenMan\Earhart\Earhart;
 use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\Facades\PropelAuth;
+use LittleGreenMan\Earhart\PropelAuth\Insights\ChartMetric;
+use LittleGreenMan\Earhart\PropelAuth\Insights\OrgReportType;
+use LittleGreenMan\Earhart\PropelAuth\Insights\UserReportType;
+use LittleGreenMan\Earhart\PropelAuth\NewApiKey;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationData;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
+use LittleGreenMan\Earhart\Services\ApiKeyService;
+use LittleGreenMan\Earhart\Services\InsightsService;
+use LittleGreenMan\Earhart\Services\MfaService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 use LittleGreenMan\Earhart\Services\UserService;
 use PHPUnit\Framework\Assert as PHPUnit;
@@ -36,6 +44,9 @@ class EarhartFake extends Earhart
         $this->state = new FakeState;
         $this->userService = new FakeUserService($this->state);
         $this->organisationService = new FakeOrganisationService($this->state);
+        $this->mfaService = new FakeMfaService($this->state);
+        $this->apiKeyService = new FakeApiKeyService($this->state);
+        $this->insightsService = new FakeInsightsService($this->state);
     }
 
     // ============================================================
@@ -113,6 +124,143 @@ class EarhartFake extends Earhart
         return $this->fakeUsers()->issueToken($userId, $token);
     }
 
+    /**
+     * Store a social login token for a user, returned by getOAuthTokens() and getFreshOAuthToken().
+     *
+     * @param  list<string>  $authorizedScopes
+     */
+    public function addOAuthToken(string $userId, string $provider, string $accessToken = 'fake-access-token', ?string $refreshToken = null, array $authorizedScopes = []): static
+    {
+        $this->state->oauthTokens[$userId][$provider] = [
+            'tokenProvider' => $provider,
+            'accessToken' => $accessToken,
+            'refreshToken' => $refreshToken,
+            'tokenExpiration' => now()->addHour()->getTimestamp(),
+            'authorizedScopes' => $authorizedScopes,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * Add a PropelAuth team member for getEmployeeEmail().
+     */
+    public function addEmployee(string $employeeId, string $email): static
+    {
+        $this->state->employees[$employeeId] = $email;
+
+        return $this;
+    }
+
+    /**
+     * Add a SCIM group to an organisation. Returns the group ID.
+     *
+     * @param  list<string>  $memberUserIds
+     */
+    public function addScimGroup(string $orgId, string $displayName, array $memberUserIds = [], ?string $externalIdFromIdp = null, ?string $groupId = null): string
+    {
+        $groupId ??= (string) Str::uuid();
+        $this->state->scimGroups[$orgId][$groupId] = [
+            'displayName' => $displayName,
+            'externalIdFromIdp' => $externalIdFromIdp,
+            'members' => $memberUserIds,
+        ];
+
+        return $groupId;
+    }
+
+    /**
+     * Give a user MFA: an authenticator app, or SMS when phone numbers (suffixes keyed by phone ID) are given.
+     *
+     * @param  array<string, string>  $phoneNumbers
+     */
+    public function withMfa(string $userId, array $phoneNumbers = []): static
+    {
+        $this->state->mfa[$userId] = [
+            'type' => $phoneNumbers === [] ? 'Totp' : 'Phone',
+            'phoneNumbers' => $phoneNumbers,
+        ];
+        if (isset($this->state->users[$userId])) {
+            $this->state->users[$userId]['mfaEnabled'] = true;
+        }
+
+        return $this;
+    }
+
+    /**
+     * The code the fake accepts for TOTP and SMS step-up checks. Defaults to 123456.
+     */
+    public function withValidMfaCode(string $code): static
+    {
+        $this->state->validMfaCode = $code;
+
+        return $this;
+    }
+
+    /**
+     * Add an end-user API key. Use the returned token in requests your test sends.
+     *
+     * @param  array<string, mixed>|null  $metadata
+     */
+    public function addApiKey(
+        ?string $userId = null,
+        ?string $orgId = null,
+        \DateTimeInterface|int|null $expiresAt = null,
+        ?array $metadata = null,
+        ?string $displayName = null,
+    ): NewApiKey {
+        /** @var FakeApiKeyService $service */
+        $service = $this->apiKeyService;
+
+        return $service->store($userId, $orgId, $expiresAt, $metadata, $displayName);
+    }
+
+    /**
+     * Set the users a user report returns. Each record needs userId and email; the rest default.
+     *
+     * @param  list<array<string, mixed>>  $records  UserReportRecord fields in camelCase
+     */
+    public function withUserReport(UserReportType $type, array $records): static
+    {
+        $this->state->userReports[$type->value] = array_map(fn (array $record) => $record + [
+            'userCreatedAt' => now()->getTimestamp(),
+            'lastActiveAt' => now()->getTimestamp(),
+            'orgData' => [],
+            'extraProperties' => [],
+        ], $records);
+
+        return $this;
+    }
+
+    /**
+     * Set the organisations an organisation report returns. Each record needs orgId and name; the rest default.
+     *
+     * @param  list<array<string, mixed>>  $records  OrgReportRecord fields in camelCase
+     */
+    public function withOrgReport(OrgReportType $type, array $records): static
+    {
+        $this->state->orgReports[$type->value] = array_map(fn (array $record) => $record + [
+            'numUsers' => 0,
+            'orgCreatedAt' => now()->getTimestamp(),
+            'extraProperties' => [],
+        ], $records);
+
+        return $this;
+    }
+
+    /**
+     * Set a chart metric's results.
+     *
+     * @param  array<string, int>  $results  Keyed by Y-m-d date
+     */
+    public function withChartMetrics(ChartMetric $metric, array $results): static
+    {
+        ksort($results);
+        $this->state->chartMetrics[$metric->value] = $results;
+
+        return $this;
+    }
+
     // ============================================================
     // Failures
     // ============================================================
@@ -120,7 +268,7 @@ class EarhartFake extends Earhart
     /**
      * Make the next call(s) fail.
      *
-     * @param  string  $target  A service class (UserService::class, OrganisationService::class) or a method name
+     * @param  string  $target  A service class (UserService::class, OrganisationService::class, MfaService::class, ApiKeyService::class, InsightsService::class) or a method name
      * @param  int|PropelAuthException  $failure  An HTTP status, mapped to the matching exception, or the exception to throw
      */
     public function failNext(string $target, int|PropelAuthException $failure = 500, int $times = 1): static
@@ -270,6 +418,17 @@ class EarhartFake extends Earhart
         return $this->assertCalled('removeUserFromOrganisation', fn ($args) => $args['orgId'] === $orgId && $args['userId'] === $userId);
     }
 
+    public function assertApiKeyCreated(?string $userId = null, ?string $orgId = null): static
+    {
+        return $this->assertCalled('createApiKey', fn ($args) => ($userId === null || $args['userId'] === $userId)
+            && ($orgId === null || $args['orgId'] === $orgId));
+    }
+
+    public function assertApiKeyDeleted(string $apiKeyId): static
+    {
+        return $this->assertCalled('deleteApiKey', fn ($args) => $args['apiKeyId'] === $apiKeyId);
+    }
+
     public function assertUserInvitedToOrganisation(string $orgId, string $email): static
     {
         return $this->assertCalled('inviteUserToOrganisation', fn ($args) => $args['orgId'] === $orgId && strcasecmp($args['email'], $email) === 0);
@@ -297,6 +456,9 @@ class EarhartFake extends Earhart
         app()->instance('earhart', $this);
         app()->instance(UserService::class, $this->userService);
         app()->instance(OrganisationService::class, $this->organisationService);
+        app()->instance(MfaService::class, $this->mfaService);
+        app()->instance(ApiKeyService::class, $this->apiKeyService);
+        app()->instance(InsightsService::class, $this->insightsService);
 
         PropelAuth::clearResolvedInstance('earhart');
 

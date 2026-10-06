@@ -5,7 +5,15 @@ namespace LittleGreenMan\Earhart\Tests\Unit\Contract;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use LittleGreenMan\Earhart\Exceptions\FeatureNotEnabledException;
+use LittleGreenMan\Earhart\PropelAuth\Insights\ChartCadence;
+use LittleGreenMan\Earhart\PropelAuth\Insights\ChartMetric;
+use LittleGreenMan\Earhart\PropelAuth\Insights\OrgReportType;
+use LittleGreenMan\Earhart\PropelAuth\Insights\UserReportType;
+use LittleGreenMan\Earhart\PropelAuth\StepUpGrantType;
+use LittleGreenMan\Earhart\Services\ApiKeyService;
 use LittleGreenMan\Earhart\Services\CacheService;
+use LittleGreenMan\Earhart\Services\InsightsService;
+use LittleGreenMan\Earhart\Services\MfaService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 use LittleGreenMan\Earhart\Services\UserService;
 use LittleGreenMan\Earhart\Tests\TestCase;
@@ -32,6 +40,21 @@ function contractUsers(): UserService
 function contractOrgs(): OrganisationService
 {
     return new OrganisationService('key', 'https://auth.example.com', new CacheService(false));
+}
+
+function contractKeys(): ApiKeyService
+{
+    return new ApiKeyService('key', 'https://auth.example.com', new CacheService(false));
+}
+
+function contractInsights(): InsightsService
+{
+    return new InsightsService('key', 'https://auth.example.com', new CacheService(false));
+}
+
+function contractMfa(): MfaService
+{
+    return new MfaService('key', 'https://auth.example.com', new CacheService(false));
 }
 
 /**
@@ -168,6 +191,147 @@ describe('requests match the Node SDK', function () {
             'POST', '/api/backend/v1/saml_idp_metadata', [],
             ['org_id' => 'o1', 'idp_entity_id' => 'https://idp/e', 'idp_sso_url' => 'https://idp/sso', 'idp_certificate' => 'CERT', 'provider' => 'Okta'],
         ],
+        'batch fetch by IDs' => [
+            fn () => contractUsers()->getUsersByIds(['u1', 'u2'], includeOrgs: true),
+            'POST', '/api/backend/v1/user/user_ids', ['include_orgs' => 'true'], ['user_ids' => ['u1', 'u2']], [fixture('fetch_user')],
+        ],
+        'batch fetch by emails' => [
+            fn () => contractUsers()->getUsersByEmails(['a@b.com']),
+            'POST', '/api/backend/v1/user/emails', [], ['emails' => ['a@b.com']], [],
+        ],
+        'batch fetch by usernames' => [
+            fn () => contractUsers()->getUsersByUsernames(['ant']),
+            'POST', '/api/backend/v1/user/usernames', [], ['usernames' => ['ant']], [],
+        ],
+        'enable can create orgs' => [
+            fn () => contractUsers()->enableCanCreateOrgs('u1'),
+            'PUT', '/api/backend/v1/user/u1/can_create_orgs/enable', [], null,
+        ],
+        'disable can create orgs' => [
+            fn () => contractUsers()->disableCanCreateOrgs('u1'),
+            'PUT', '/api/backend/v1/user/u1/can_create_orgs/disable', [], null,
+        ],
+        'OAuth tokens' => [
+            fn () => contractUsers()->getOAuthTokens('u1'),
+            'GET', '/api/backend/v1/user/u1/oauth_token', [], null,
+        ],
+        'fresh OAuth token' => [
+            fn () => contractUsers()->getFreshOAuthToken('u1', 'google'),
+            'GET', '/api/backend/v1/user/u1/google/fresh_token', [], null, ['access_token' => 't', 'token_provider' => 'google'],
+        ],
+        'employee' => [
+            fn () => contractUsers()->getEmployeeEmail('e1'),
+            'GET', '/api/backend/v1/employee/e1', [], null, ['email' => 'staff@propelauth.com'],
+        ],
+        'invite by user ID' => [
+            fn () => contractOrgs()->inviteUserToOrganisationById('o1', 'u1', 'Admin', ['Member']),
+            'POST', '/api/backend/v1/invite_user_by_id', [], ['org_id' => 'o1', 'user_id' => 'u1', 'role' => 'Admin', 'additional_roles' => ['Member']],
+        ],
+        'set OIDC IdP metadata (Okta)' => [
+            fn () => contractOrgs()->setOIDCIdPMetadata('o1', 'cid', 'secret', 'Okta', true, oktaSsoDomain: 'example.okta.com'),
+            'POST', '/api/backend/v1/oidc_idp_metadata', [],
+            ['org_id' => 'o1', 'client_id' => 'cid', 'client_secret' => 'secret', 'uses_pkce' => true, 'idp_type' => 'Okta', 'okta_sso_domain' => 'example.okta.com'],
+        ],
+        'set OIDC IdP metadata (Generic)' => [
+            fn () => contractOrgs()->setOIDCIdPMetadata('o1', 'cid', 'secret', 'Generic', false, authUrl: 'https://idp/auth', tokenUrl: 'https://idp/token', userinfoUrl: 'https://idp/userinfo'),
+            'POST', '/api/backend/v1/oidc_idp_metadata', [],
+            ['org_id' => 'o1', 'client_id' => 'cid', 'client_secret' => 'secret', 'uses_pkce' => false, 'idp_type' => 'Generic',
+                'auth_url' => 'https://idp/auth', 'token_url' => 'https://idp/token', 'userinfo_url' => 'https://idp/userinfo'],
+        ],
+        'SCIM groups' => [
+            fn () => contractOrgs()->getScimGroups('o1', 'u1', 10, 0),
+            'GET', '/api/backend/v1/scim/o1/groups', ['user_id' => 'u1', 'page_size' => '10', 'page_number' => '0'], null,
+            ['total_groups' => 0, 'page_size' => 10, 'page_number' => 0, 'groups' => []],
+        ],
+        'SCIM group' => [
+            fn () => contractOrgs()->getScimGroup('o1', 'g1', 10, 0),
+            'GET', '/api/backend/v1/scim/o1/groups/g1', ['members_page_size' => '10', 'members_page_number' => '0'], null,
+            ['group_id' => 'g1', 'display_name' => 'Engineering', 'members' => []],
+        ],
+        'user MFA methods' => [
+            fn () => contractMfa()->getUserMfaMethods('u1'),
+            'GET', '/api/backend/v1/user/u1/mfa', [], null, ['mfa_setup' => null],
+        ],
+        'verify TOTP' => [
+            fn () => contractMfa()->verifyTotp('u1', '123456', 'DELETE_ACCOUNT', StepUpGrantType::TimeBased, 60),
+            'POST', '/api/backend/v1/mfa/step-up/verify-totp', [],
+            ['action_type' => 'DELETE_ACCOUNT', 'user_id' => 'u1', 'code' => '123456', 'grant_type' => 'TIME_BASED', 'valid_for_seconds' => 60],
+            ['step_up_grant' => 'g'],
+        ],
+        'send SMS code' => [
+            fn () => contractMfa()->sendSmsCode('u1', 'p1', 'DELETE_ACCOUNT'),
+            'POST', '/api/backend/v1/mfa/step-up/phone/send', [],
+            ['action_type' => 'DELETE_ACCOUNT', 'user_id' => 'u1', 'mfa_phone_id' => 'p1', 'grant_type' => 'ONE_TIME_USE', 'valid_for_seconds' => 300],
+            ['challenge_id' => 'c1'],
+        ],
+        'verify SMS code' => [
+            fn () => contractMfa()->verifySmsCode('u1', 'c1', '123456'),
+            'POST', '/api/backend/v1/mfa/step-up/phone/verify', [], ['challenge_id' => 'c1', 'user_id' => 'u1', 'code' => '123456'], ['step_up_grant' => 'g'],
+        ],
+        'verify grant' => [
+            fn () => contractMfa()->verifyGrant('u1', 'DELETE_ACCOUNT', 'g'),
+            'POST', '/api/backend/v1/mfa/step-up/verify-grant', [], ['action_type' => 'DELETE_ACCOUNT', 'user_id' => 'u1', 'grant' => 'g'],
+        ],
+        'create API key' => [
+            fn () => contractKeys()->createApiKey('u1', 'o1', 1712880246, ['customKey' => 'v'], 'CI'),
+            'POST', '/api/backend/v1/end_user_api_keys', [],
+            ['user_id' => 'u1', 'org_id' => 'o1', 'expires_at_seconds' => 1712880246, 'metadata' => ['customKey' => 'v'], 'display_name' => 'CI'],
+            fixture('create_api_key'),
+        ],
+        'import API key' => [
+            fn () => contractKeys()->importApiKey('legacy-secret', userId: 'u1'),
+            'POST', '/api/backend/v1/end_user_api_keys/import', [], ['imported_api_key' => 'legacy-secret', 'user_id' => 'u1'], ['api_key_id' => 'k1'],
+        ],
+        'fetch API key' => [
+            fn () => contractKeys()->getApiKey('85b90f38'),
+            'GET', '/api/backend/v1/end_user_api_keys/85b90f38', [], null, fixture('fetch_api_key'),
+        ],
+        'active API keys' => [
+            fn () => contractKeys()->getActiveApiKeys('u1', 'o1', 'a@b.com', 10, 0),
+            'GET', '/api/backend/v1/end_user_api_keys', ['user_id' => 'u1', 'org_id' => 'o1', 'user_email' => 'a@b.com', 'page_size' => '10', 'page_number' => '0'], null,
+            fixture('active_api_keys'),
+        ],
+        'archived API keys' => [
+            fn () => contractKeys()->getArchivedApiKeys(orgId: 'o1'),
+            'GET', '/api/backend/v1/end_user_api_keys/archived', ['org_id' => 'o1', 'page_size' => '10', 'page_number' => '0'], null, fixture('active_api_keys'),
+        ],
+        'update API key' => [
+            fn () => contractKeys()->updateApiKey('k1', 1712848015, ['customKey' => 'v']),
+            'PATCH', '/api/backend/v1/end_user_api_keys/k1', [], ['expires_at_seconds' => 1712848015, 'metadata' => ['customKey' => 'v']],
+        ],
+        'update API key to never expire' => [
+            fn () => contractKeys()->updateApiKey('k1', neverExpire: true),
+            'PATCH', '/api/backend/v1/end_user_api_keys/k1', [], ['set_to_never_expire' => true],
+        ],
+        'delete API key' => [
+            fn () => contractKeys()->deleteApiKey('k1'),
+            'DELETE', '/api/backend/v1/end_user_api_keys/k1', [], null,
+        ],
+        'validate API key' => [
+            fn () => contractKeys()->validateApiKey('Bearer secret'),
+            'POST', '/api/backend/v1/end_user_api_keys/validate', [], ['api_key_token' => 'secret'], fixture('validate_api_key'),
+        ],
+        'validate imported API key' => [
+            fn () => contractKeys()->validateImportedApiKey('secret'),
+            'POST', '/api/backend/v1/end_user_api_keys/validate_imported', [], ['api_key_token' => 'secret'], fixture('validate_api_key'),
+        ],
+        'API key usage' => [
+            fn () => contractKeys()->getApiKeyUsage(new \DateTimeImmutable('2026-10-06'), 'k1', 'u1', 'o1'),
+            'GET', '/api/backend/v1/end_user_api_keys/usage', ['date' => '2026-10-06', 'api_key_id' => 'k1', 'user_id' => 'u1', 'org_id' => 'o1'], null, ['count' => 3],
+        ],
+        'user report' => [
+            fn () => contractInsights()->getUserReport(UserReportType::TopInviter, 30, 10, 0),
+            'GET', '/api/backend/v1/user_report/top_inviter', ['report_interval' => '30', 'page_size' => '10', 'page_number' => '0'], null, fixture('top_inviter_report'),
+        ],
+        'org report' => [
+            fn () => contractInsights()->getOrgReport(OrgReportType::Reengagement, 'weekly', 5, 1),
+            'GET', '/api/backend/v1/org_report/reengagement', ['report_interval' => 'Weekly', 'page_size' => '5', 'page_number' => '1'], null,
+            ['org_reports' => [], 'current_page' => 1, 'total_count' => 0, 'page_size' => 5, 'has_more_results' => false, 'report_time' => 1773330458],
+        ],
+        'chart metrics' => [
+            fn () => contractInsights()->getChartMetrics(ChartMetric::ActiveOrgs, ChartCadence::Daily, '2026-01-01', new \DateTimeImmutable('2026-01-31')),
+            'GET', '/api/backend/v1/chart_metrics/active_orgs', ['cadence' => 'Daily', 'start_date' => '2026-01-01', 'end_date' => '2026-01-31'], null, fixture('chart_metrics'),
+        ],
         'fetch SAML SP metadata' => [
             fn () => contractOrgs()->fetchSAMLMetadata('o1'),
             'GET', '/api/backend/v1/saml_sp_metadata/o1', [], null, fixture('saml_sp_metadata'),
@@ -231,6 +395,25 @@ describe('responses from the Postman examples parse', function () {
         $metadata = capture(fn () => contractOrgs()->fetchSAMLMetadata('o1'), fixture('saml_sp_metadata'))['result'];
 
         expect($metadata->acsUrl)->toBe('https://example.propelauthtest.com/saml/6983/acs');
+    });
+
+    test('user report from the docs example', function () {
+        $report = capture(fn () => contractInsights()->getUserReport(UserReportType::TopInviter), fixture('top_inviter_report'))['result'];
+        $record = $report->items[0];
+
+        expect($report->totalItems)->toBe(2)
+            ->and($report->reportTime->getTimestamp())->toBe(1773330458)
+            ->and($record->email)->toBe('john@acmeinc.com')
+            ->and($record->orgs)->toBe([['orgId' => '4f18c3', 'displayName' => 'Acme Inc', 'userRole' => 'Owner']])
+            ->and($record->extraProperties)->toBe(['num_invites' => 4]);
+    });
+
+    test('chart metrics from the docs example', function () {
+        $chart = capture(fn () => contractInsights()->getChartMetrics(ChartMetric::ActiveOrgs), fixture('chart_metrics'))['result'];
+
+        expect($chart->cadence)->toBe(ChartCadence::Daily)
+            ->and($chart->toArray())->toBe(['2026-01-01' => 10, '2026-01-02' => 14])
+            ->and($chart->points[0]['cadenceCompleted'])->toBeFalse();
     });
 
     test('user-defined keys keep their case', function () {
