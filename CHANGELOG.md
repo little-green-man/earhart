@@ -10,13 +10,17 @@ Contains breaking changes. See [UPGRADE-3.0.md](UPGRADE-3.0.md).
 
 - A 404 from any API call now throws. Calls on a user ID throw `InvalidUserException`, calls on an organisation ID throw `InvalidOrgException`, and calls that name both (`addUserToOrganisation()`, `removeUserFromOrganisation()`, `changeUserRole()`) throw a `PropelAuthException` with status 404. Previously writes such as `disableUser()`, `enableUser()` and `deleteUser()` returned `true` for a missing user. Write methods still return `true`; failures always throw
 - API failures throw `PropelAuthException` (or a subclass) instead of a bare `\Exception`: `ValidationException` for 400/422, the new `UnauthorizedException` for 401/403, `RateLimitException` for 429. Code catching `\Exception` still works
-- Exception messages no longer contain the response body (`PropelAuth API error: 500 on DELETE /api/backend/v1/user/{id}`). The body, truncated to 1,024 characters, is in `getContext()['response_body']` and is left out of `report()` logging
+- Exception messages no longer contain the response body (`PropelAuth API error: 500 on DELETE /api/backend/v1/user/{id}`). The body, truncated to 1,024 characters, is in `getContext()['response_body']` and is left out of logs
+- `PropelAuthException::report()` is replaced by `context()`. `report()` stopped Laravel's handler from reporting the exception any further, so error trackers such as Sentry and Nightwatch never received it. Laravel now reports it as normal, with the status code and context (minus the response body) added to the log entry
 - `RateLimitException::fromHeaders()` no longer floors `Retry-After` at 60 seconds, and also accepts an HTTP date
 - Rate-limit retries honour `Retry-After`, are capped by `earhart.retries.max_delay_ms` (default 5 s) and fail at once when `Retry-After` exceeds the cap
 - Internal: `makeRequest()`/`sendRequest()` no longer add a `status` key to the response, so a PropelAuth payload with its own `status` key is no longer misread. `makeRequest()` takes an optional `$notFound` closure. The protected `$maxRetries` and `$initialRetryDelay` properties are removed
 
 ### Added
 
+- `Earhart::fake()` / `PropelAuth::fake()`: an in-memory fake for tests that covers the facade, injected `Earhart`, `UserService` and `OrganisationService`. Seed users and organisations, script failures with `failNext()`, and assert calls such as `assertUserDisabled()`. See [Testing](docs/USING_PROPEL_API.md#testing)
+- `PropelAuthException::forStatus()` builds the exception subclass for an HTTP status
+- `getOrganisationUsers()` takes a `$pageNumber` argument
 - `earhart.http.timeout` and `earhart.http.connect_timeout` config (defaults 30 s and 10 s)
 - `earhart.retries.times`, `base_delay_ms` and `max_delay_ms` config. `times` = 0 disables retries
 - `ValidationException::getErrors()` returns PropelAuth's decoded error body for API failures
@@ -26,6 +30,7 @@ Contains breaking changes. See [UPGRADE-3.0.md](UPGRADE-3.0.md).
 ### Fixed
 
 - Retry jitter was always 0; it is now computed in milliseconds
+- `getOrganisationUsers()` pagination: `nextPage()` and `allPages()` re-fetched the first page instead of the next one
 
 ## [2.1.1] - 2026-09-28
 

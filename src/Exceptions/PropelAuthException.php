@@ -4,7 +4,6 @@ namespace LittleGreenMan\Earhart\Exceptions;
 
 use Exception;
 use Illuminate\Http\Client\Response;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class PropelAuthException extends Exception
@@ -38,26 +37,32 @@ class PropelAuthException extends Exception
      */
     public static function fromResponse(string $method, string $endpoint, Response $response): self
     {
-        $status = $response->status();
-
-        if ($status === 429) {
+        if ($response->status() === 429) {
             return RateLimitException::fromHeaders($response->header('Retry-After') ?: null);
         }
 
-        $message = "PropelAuth API error: {$status} on {$method} {$endpoint}";
-        $context = [
-            'method' => $method,
-            'endpoint' => $endpoint,
-            'response_body' => Str::limit($response->body(), self::MAX_BODY_LENGTH),
-        ];
+        return static::forStatus(
+            $response->status(),
+            "PropelAuth API error: {$response->status()} on {$method} {$endpoint}",
+            [
+                'method' => $method,
+                'endpoint' => $endpoint,
+                'response_body' => Str::limit($response->body(), self::MAX_BODY_LENGTH),
+            ],
+            is_array($response->json()) ? $response->json() : null,
+        );
+    }
 
+    /**
+     * Build the exception subclass matching an HTTP status.
+     *
+     * @param  array<mixed>|null  $errors  Field errors, used for a ValidationException
+     */
+    public static function forStatus(int $status, string $message, ?array $context = null, ?array $errors = null): self
+    {
         return match (true) {
-            in_array($status, [400, 422], true) => new ValidationException(
-                $message,
-                is_array($response->json()) ? $response->json() : null,
-                $status,
-                $context,
-            ),
+            $status === 429 => new RateLimitException($message),
+            in_array($status, [400, 422], true) => new ValidationException($message, $errors, $status, $context),
             in_array($status, [401, 403], true) => new UnauthorizedException($message, $status, $context),
             default => new self($message, $status, $context),
         };
@@ -73,17 +78,20 @@ class PropelAuthException extends Exception
         return $this->context;
     }
 
-    public function report(): void
+    /**
+     * Extra log context, added by Laravel's exception handler when it reports
+     * this exception. The response body may echo user data, so it is left out.
+     *
+     * @return array<string, mixed>
+     */
+    public function context(): array
     {
-        // The response body may echo user data, so it is left out of the log.
         $context = $this->context;
         unset($context['response_body']);
 
-        Log::error($this->message, [
+        return [
             'status_code' => $this->statusCode,
             'context' => $context,
-            'exception' => static::class,
-            'trace' => $this->getTrace(),
-        ]);
+        ];
     }
 }

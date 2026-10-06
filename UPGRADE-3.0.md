@@ -7,6 +7,7 @@ This guide covers upgrading from Earhart v2.x to v3.0. Most apps need no code ch
 - [ ] Handle not-found exceptions on write calls
 - [ ] Stop parsing exception messages for the response body
 - [ ] Check your rate-limit retry expectations
+- [ ] Check PropelAuth errors now reaching your error tracker
 - [ ] Update any subclass of `UserService`, `OrganisationService` or `BaseApiService`
 
 ## 1. Write calls throw on a 404
@@ -84,7 +85,17 @@ try {
 }
 ```
 
-`PropelAuthException::report()` leaves `response_body` out of what it logs.
+### Reporting
+
+v2's `PropelAuthException::report()` wrote its own `Log::error()` entry, which stopped Laravel's exception handler going any further: error trackers such as Sentry and Nightwatch never saw these exceptions. v3 removes `report()` and adds `context()`, so Laravel reports them as normal, with `status_code` and `context` (minus `response_body`) added to the log entry.
+
+If you relied on the old log entry's shape, or you now see PropelAuth errors in your tracker that you don't want, filter them in `bootstrap/app.php`:
+
+```php
+->withExceptions(function (Exceptions $exceptions) {
+    $exceptions->dontReport(InvalidUserException::class);
+})
+```
 
 ## 3. Rate-limit retries
 
@@ -146,3 +157,20 @@ The defaults apply even if you don't.
 
 - `sendRequest()` throws on every failed response, including a 404.
 - The `$maxRetries` and `$initialRetryDelay` properties are removed; use the `earhart.retries` config.
+
+## New: testing fake
+
+Not breaking, but it replaces mocking `Earhart` with Mockery or faking raw PropelAuth URLs with `Http::fake()`:
+
+```php
+use LittleGreenMan\Earhart\Earhart;
+
+$fake = Earhart::fake();
+$user = $fake->addUser(['email' => 'jane@example.com']);
+
+$this->post("/admin/users/{$user->userId}/disable");
+
+$fake->assertUserDisabled($user->userId);
+```
+
+See [Testing](docs/USING_PROPEL_API.md#testing).

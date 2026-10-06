@@ -11,6 +11,7 @@ use LittleGreenMan\Earhart\PropelAuth\UserData;
 use LittleGreenMan\Earhart\Services\CacheService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 use LittleGreenMan\Earhart\Services\UserService;
+use LittleGreenMan\Earhart\Testing\EarhartFake;
 
 class Earhart
 {
@@ -33,6 +34,16 @@ class Earhart
         $this->cacheService = new CacheService($enableCache, $cacheTtlMinutes);
         $this->userService = new UserService($apiKey, $authUrl, $this->cacheService);
         $this->organisationService = new OrganisationService($apiKey, $authUrl, $this->cacheService);
+    }
+
+    /**
+     * Replace Earhart in the container with an in-memory fake for testing.
+     *
+     * Covers the facade, injected Earhart, UserService and OrganisationService.
+     */
+    public static function fake(): EarhartFake
+    {
+        return (new EarhartFake)->swap();
     }
 
     // ============================================================

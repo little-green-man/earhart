@@ -67,10 +67,11 @@ class OrganisationService extends BaseApiService
      * @throws InvalidOrgException If the organisation does not exist
      * @throws PropelAuthException On any other API failure
      */
-    public function getOrganisationUsers(string $orgId, int $pageSize = 100): PaginatedResult
+    public function getOrganisationUsers(string $orgId, int $pageSize = 100, int $pageNumber = 0): PaginatedResult
     {
         $response = $this->makeRequest('GET', "/api/backend/v1/user/org/{$orgId}", [
             'pageSize' => $pageSize,
+            'pageNumber' => $pageNumber,
             'includeOrgs' => false,
         ], fn () => InvalidOrgException::notFound($orgId));
 
@@ -81,7 +82,7 @@ class OrganisationService extends BaseApiService
         );
         $response['items'] = $users;
 
-        return PaginatedResult::from($response, fn (int $nextPage) => $this->getOrganisationUsers($orgId, $pageSize));
+        return PaginatedResult::from($response, fn (int $nextPage) => $this->getOrganisationUsers($orgId, $pageSize, $nextPage));
     }
 
     /**

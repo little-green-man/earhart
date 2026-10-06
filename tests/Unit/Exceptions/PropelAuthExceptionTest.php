@@ -3,7 +3,6 @@
 namespace LittleGreenMan\Earhart\Tests\Unit\Exceptions;
 
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Log;
 use LittleGreenMan\Earhart\Exceptions\InvalidOrgException;
 use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
 use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
@@ -33,32 +32,23 @@ describe('PropelAuthException', function () {
         expect($exception->getStatusCode())->toBe(500);
     });
 
-    test('logs error with context', function () {
-        $context = ['user_id' => 'test123'];
-        $exception = new PropelAuthException('Test error', 400, $context);
+    test('adds status and context to the log context', function () {
+        $exception = new PropelAuthException('Test error', 400, ['user_id' => 'test123']);
 
-        // Mock Log facade
-        Log::shouldReceive('error')
-            ->once()
-            ->with('Test error', \Mockery::on(function ($logged) use ($context) {
-                return
-                    isset($logged['status_code'])
-                    && $logged['status_code'] === 400
-                    && isset($logged['context'])
-                    && $logged['context'] === $context;
-            }));
-
-        $exception->report();
+        expect($exception->context())->toBe([
+            'status_code' => 400,
+            'context' => ['user_id' => 'test123'],
+        ]);
     });
 
-    test('leaves the response body out of the log', function () {
+    test('leaves the response body out of the log context', function () {
         $exception = new PropelAuthException('Test error', 500, ['endpoint' => '/x', 'response_body' => 'jane@example.com']);
 
-        Log::shouldReceive('error')
-            ->once()
-            ->with('Test error', \Mockery::on(fn ($logged) => $logged['context'] === ['endpoint' => '/x']));
+        expect($exception->context()['context'])->toBe(['endpoint' => '/x']);
+    });
 
-        $exception->report();
+    test('does not stop Laravel reporting it', function () {
+        expect(method_exists(PropelAuthException::class, 'report'))->toBeFalse();
     });
 
     test('can chain with previous exception', function () {

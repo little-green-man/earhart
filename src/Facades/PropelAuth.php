@@ -3,6 +3,8 @@
 namespace LittleGreenMan\Earhart\Facades;
 
 use Illuminate\Support\Facades\Facade;
+use LittleGreenMan\Earhart\Earhart;
+use LittleGreenMan\Earhart\Testing\EarhartFake;
 
 /**
  * @method static \LittleGreenMan\Earhart\PropelAuth\UserData getUser(string $userId, bool $fresh = false)
@@ -38,6 +40,14 @@ use Illuminate\Support\Facades\Facade;
  */
 class PropelAuth extends Facade
 {
+    /**
+     * Replace Earhart with an in-memory fake for testing.
+     */
+    public static function fake(): EarhartFake
+    {
+        return Earhart::fake();
+    }
+
     protected static function getFacadeAccessor(): string
     {
         return 'earhart';

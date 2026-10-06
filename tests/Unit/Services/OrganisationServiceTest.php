@@ -250,6 +250,26 @@ describe('OrganisationService', function () {
             expect(fn () => $service->deleteOrganisation('invalid'))->toThrow(InvalidOrgException::class);
         });
 
+        test('getOrganisationUsers fetches the next page', function () {
+            Http::fake(function ($request) {
+                parse_str(parse_url($request->url(), PHP_URL_QUERY), $query);
+                $page = (int) ($query['page_number'] ?? 0);
+
+                return Http::response([
+                    'users' => [],
+                    'total_users' => 2,
+                    'current_page' => $page,
+                    'page_size' => 1,
+                    'has_more_results' => $page === 0,
+                ]);
+            });
+
+            $next = createOrganisationService()->getOrganisationUsers('org1', pageSize: 1)->nextPage();
+
+            expect($next->currentPage)->toBe(1);
+            Http::assertSent(fn ($request) => str_contains($request->url(), 'page_number=1'));
+        });
+
         test('other organisation writes throw when the organisation is not found', function (string $endpoint, \Closure $call) {
             Http::fake([
                 "https://auth.example.com{$endpoint}" => Http::response([], 404),

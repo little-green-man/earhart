@@ -47,6 +47,7 @@ echo $user->emailConfirmed;  // true
 - [Pagination & Data Handling](#pagination--data-handling)
 - [Caching](#caching)
 - [Error Handling](#error-handling)
+- [Testing](#testing)
 - [Advanced Usage](#advanced-usage)
 - [Missing Features & Limitations](#missing-features--limitations)
 
@@ -889,6 +890,78 @@ public function getUserSafely(string $userId)
         return null;
     }
 }
+```
+
+## Testing
+
+`Earhart::fake()` (or `PropelAuth::fake()`) swaps Earhart for an in-memory fake. It replaces the facade, injected `Earhart`, `UserService` and `OrganisationService`, so the middleware and `users()`/`organisations()` use it too. Nothing is sent to PropelAuth.
+
+```php
+use LittleGreenMan\Earhart\Earhart;
+use LittleGreenMan\Earhart\Services\UserService;
+
+test('admins can disable a user', function () {
+    $fake = Earhart::fake();
+    $user = $fake->addUser(['email' => 'jane@example.com']);
+
+    $this->post("/admin/users/{$user->userId}/disable")->assertOk();
+
+    $fake->assertUserDisabled($user->userId);
+});
+```
+
+### Seeding
+
+```php
+$user = $fake->addUser(['email' => 'jane@example.com', 'firstName' => 'Jane']); // UserData; missing fields get defaults
+$org = $fake->addOrganisation(['name' => 'Acme'], members: [$user->userId => 'Admin']);
+$fake->addMember($org->orgId, $otherUserId, 'Member');
+$token = $fake->issueToken($user->userId); // Accepted by validateToken() and VerifyPropelAuthUser
+```
+
+Seeding is not recorded as a call.
+
+### Behaviour
+
+The fake keeps state: `disableUser()` sets `enabled` to `false`, `deleteUser()` removes the user and their memberships, `createUser()` with an existing email throws a `ValidationException`, and so on. Calls on a missing user or organisation throw the same exceptions as the real services, so you can test "already gone" handling without scripting anything.
+
+### Scripting failures
+
+```php
+$fake->failNext(UserService::class, 500);           // Next UserService call throws PropelAuthException (500)
+$fake->failNext('deleteUser', 429);                 // Next deleteUser() throws RateLimitException
+$fake->failNext('getUser', 403, times: 2);          // Next two getUser() calls throw UnauthorizedException
+$fake->failNext('getUser', InvalidUserException::notFound('x')); // Throw a specific exception
+```
+
+A status maps to the same exception the real services throw. A method-specific failure is used before a service-wide one.
+
+### Assertions
+
+Assertions only count calls that succeeded.
+
+```php
+$fake->assertUserCreated('jane@example.com');
+$fake->assertUserUpdated($userId);
+$fake->assertUserDisabled($userId);
+$fake->assertUserEnabled($userId);
+$fake->assertUserDeleted($userId);
+$fake->assertUserLoggedOut($userId);
+$fake->assertOrganisationCreated('Acme');
+$fake->assertOrganisationUpdated($orgId);
+$fake->assertOrganisationDeleted($orgId);
+$fake->assertUserAddedToOrganisation($orgId, $userId, 'Admin');
+$fake->assertUserRemovedFromOrganisation($orgId, $userId);
+$fake->assertUserInvitedToOrganisation($orgId, 'new@example.com');
+
+// Any method, with its named arguments
+$fake->assertCalled('createAccessToken', fn (array $args) => $args['durationInMinutes'] === 5);
+$fake->assertCalledTimes('getUser', 2);
+$fake->assertNotCalled('deleteUser');
+$fake->assertNothingCalled();
+
+// Raw log, including failed calls
+$fake->calls();
 ```
 
 ## Advanced Usage
