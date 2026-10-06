@@ -37,19 +37,20 @@ class UserService extends BaseApiService
      * Verify an access token and return the full user.
      *
      * The token is verified locally (see verifyAccessToken()), then the user
-     * is fetched with getUser() so the result is current: a user disabled
-     * since the token was issued comes back with `enabled` false.
+     * is fetched with getUser(), so a user disabled since the token was issued
+     * comes back with `enabled` false. With caching enabled the user may be
+     * up to the cache TTL old, unless PropelAuth's webhooks invalidate it
+     * (WebhookCacheInvalidator); pass $fresh to always fetch.
      *
-     * @throws InvalidTokenException If the token is invalid or expired
-     * @throws InvalidUserException If the user no longer exists
-     * @throws PropelAuthException On any other API failure
+     * @throws InvalidTokenException If the token is invalid or expired, or its user no longer exists
+     * @throws PropelAuthException On any other API failure, including fetching the verifier key
      */
-    public function validateToken(string $token): UserData
+    public function validateToken(string $token, bool $fresh = false): UserData
     {
         $accessToken = $this->verifyAccessToken($token);
 
         try {
-            return $this->getUser($accessToken->userId);
+            return $this->getUser($accessToken->userId, $fresh);
         } catch (InvalidUserException $e) {
             throw InvalidTokenException::because('the user no longer exists', $e);
         }
@@ -64,18 +65,21 @@ class UserService extends BaseApiService
      * `earhart.token_verification.verifier_key`.
      *
      * @throws InvalidTokenException If the token is invalid or expired
-     * @throws PropelAuthException If the verifier key can't be fetched
+     * @throws PropelAuthException If the verifier key can't be fetched (not wrapped as an invalid token)
      */
     public function verifyAccessToken(string $token): AccessToken
     {
         $token = preg_replace('/^Bearer\s+/i', '', trim($token));
+
+        // Outside the try: failing to fetch the key is an API failure, not an invalid token
+        $key = new Key($this->verifierKey(), 'RS256');
 
         $previousLeeway = JWT::$leeway;
         JWT::$leeway = 60;
 
         try {
             $claims = (array) json_decode(
-                (string) json_encode(JWT::decode($token, new Key($this->verifierKey(), 'RS256'))),
+                (string) json_encode(JWT::decode($token, $key)),
                 true,
             );
         } catch (\Throwable $e) {

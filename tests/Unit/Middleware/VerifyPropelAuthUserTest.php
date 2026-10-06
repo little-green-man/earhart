@@ -216,7 +216,7 @@ describe('VerifyPropelAuthUser', function () {
         expect($response->getStatusCode())->toBe(200);
     });
 
-    test('handles api exceptions gracefully', function () {
+    test('lets API failures propagate instead of reporting a bad token', function () {
         /** @var UserService&MockInterface $userService */
         $userService = mock(UserService::class);
         $userService->shouldReceive('validateToken')->andThrow(new \Exception('API Error'));
@@ -233,11 +233,8 @@ describe('VerifyPropelAuthUser', function () {
             ],
         );
 
-        $response = $middleware->handle($request, fn ($req) => response('OK'));
-
-        expect($response->getStatusCode())->toBe(Response::HTTP_UNAUTHORIZED);
-        $data = json_decode($response->getContent(), true);
-        expect($data['message'])->toContain('API Error');
+        expect(fn () => $middleware->handle($request, fn ($req) => response('OK')))
+            ->toThrow(\Exception::class, 'API Error');
     });
 
     test('requires bearer prefix in authorization header', function () {

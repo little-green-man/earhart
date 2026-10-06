@@ -6,7 +6,13 @@ use Illuminate\Support\Facades\Cache;
 
 class CacheService
 {
-    protected const GENERATION_KEY = 'propelauth.generation';
+    /**
+     * Prefix for every entry. Bumped when cached data classes change shape,
+     * so entries written by an older version are never read back.
+     */
+    protected const PREFIX = 'propelauth.v3';
+
+    protected const GENERATION_KEY = self::PREFIX.'.generation';
 
     protected int $ttlSeconds;
 
@@ -98,7 +104,7 @@ class CacheService
     {
         $generation = $this->generation();
 
-        return $generation === 0 ? "propelauth.{$key}" : "propelauth.{$generation}.{$key}";
+        return $generation === 0 ? self::PREFIX.".{$key}" : self::PREFIX.".{$generation}.{$key}";
     }
 
     protected function generation(): int

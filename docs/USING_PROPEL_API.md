@@ -92,7 +92,7 @@ try {
 }
 ```
 
-`VerifyPropelAuthUser` uses `validateToken()`. To skip the key request, set `PROPELAUTH_VERIFIER_KEY` to the public key from the **Backend Integration** page. After rotating the key in PropelAuth, call `app('earhart')->users()->forgetVerifierKey()`.
+`VerifyPropelAuthUser` uses `validateToken()`. With caching enabled, the user it fetches can be up to the cache TTL old unless PropelAuth's webhooks invalidate it; pass `fresh: true` to `validateToken()` to always fetch. If PropelAuth can't be reached or the API key is wrong, the middleware lets the exception through to your error handler rather than returning 401. To skip the key request, set `PROPELAUTH_VERIFIER_KEY` to the public key from the **Backend Integration** page. After rotating the key in PropelAuth, call `app('earhart')->users()->forgetVerifierKey()`.
 
 `VerifyPropelAuthOrg` and `VerifyPropelAuthPermission` read memberships from the user. `VerifyPropelAuthPermission` takes a role and passes any user whose role inherits it (an Owner passes `Admin`), or `permission:<name>` to check a permission.
 

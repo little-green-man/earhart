@@ -33,22 +33,21 @@ class VerifyPropelAuthUser
         try {
             // Verify the token locally, then fetch the current user
             $user = $this->userService->validateToken($token);
-
-            // Check if user is disabled
-            if ($user->enabled === false) {
-                return $this->forbidden('User account is disabled');
-            }
-
-            // Inject user into request for downstream use
-            $request->attributes->set('propelauth_user', $user);
-            $request->setUserResolver(fn () => $user);
-
-            return $next($request);
         } catch (InvalidTokenException|InvalidUserException) {
             return $this->unauthorized('Invalid or expired token');
-        } catch (\Exception $e) {
-            return $this->unauthorized('Authentication failed: '.$e->getMessage());
         }
+        // Other failures (PropelAuth unreachable, a misconfigured API key) propagate,
+        // so they reach your error handler instead of looking like a bad token.
+
+        if ($user->enabled === false) {
+            return $this->forbidden('User account is disabled');
+        }
+
+        // Inject user into request for downstream use
+        $request->attributes->set('propelauth_user', $user);
+        $request->setUserResolver(fn () => $user);
+
+        return $next($request);
     }
 
     /**
