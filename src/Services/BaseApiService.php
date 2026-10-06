@@ -27,6 +27,7 @@ abstract class BaseApiService
         'org_id_to_org_info',
         'org_metadata',
         'user_signup_query_parameters',
+        'extra_properties',
     ];
 
     public function __construct(

@@ -47,6 +47,7 @@ echo $user->emailConfirmed;  // true
   - [SAML Configuration](#saml-configuration)
 - [Step-Up MFA](#step-up-mfa)
 - [End-User API Keys](#end-user-api-keys)
+- [Insights](#insights)
 - [Pagination & Data Handling](#pagination--data-handling)
 - [Caching](#caching)
 - [Error Handling](#error-handling)
@@ -935,6 +936,42 @@ $apiKeyId = $keys->importApiKey($legacySecret, userId: $userId);
 $keys->validateImportedApiKey($legacySecret);
 ```
 
+## Insights
+
+> **API Reference**: [User and Org Insights](https://docs.propelauth.com/reference/api/insights)
+
+PropelAuth's reports on user and organisation activity, and chart metrics.
+
+```php
+use LittleGreenMan\Earhart\PropelAuth\Insights\ChartCadence;
+use LittleGreenMan\Earhart\PropelAuth\Insights\ChartMetric;
+use LittleGreenMan\Earhart\PropelAuth\Insights\OrgReportType;
+use LittleGreenMan\Earhart\PropelAuth\Insights\UserReportType;
+
+$insights = app('earhart')->insights();
+
+// User reports: Reengagement, Churn, TopInviter, Champion
+$report = $insights->getUserReport(UserReportType::TopInviter, interval: 30);
+
+$report->reportTime;                       // When PropelAuth generated it
+foreach ($report->allPages() as $user) {   // UserReportRecord
+    echo "{$user->email}: {$user->extraProperties['num_invites']}\n";
+    $user->orgs;                           // [['orgId', 'displayName', 'userRole'], ...]
+}
+
+// Organisation reports: Reengagement, Churn, Growth, Attrition
+$report = $insights->getOrgReport(OrgReportType::Growth, interval: 90, pageSize: 25);
+$report->items[0]->name;                   // OrgReportRecord
+$report->items[0]->numUsers;
+
+// Chart metrics: Signups, OrgsCreated, ActiveUsers, ActiveOrgs
+$chart = $insights->getChartMetrics(ChartMetric::Signups, ChartCadence::Weekly, now()->subMonths(3), now());
+$chart->toArray();                         // ['2026-07-06' => 42, ...]
+$chart->points;                            // Each with date, result and cadenceCompleted (false while in progress)
+```
+
+Each report takes its own intervals, listed by `$type->intervals()`: `Weekly` or `Monthly` for re-engagement, 7, 14 or 30 days for churn, and 30, 60 or 90 days otherwise. An interval a report doesn't offer throws `InvalidArgumentException` before any request is made. Leave it out for PropelAuth's default.
+
 ## Pagination & Data Handling
 
 ### Working with Paginated Results
@@ -1173,6 +1210,9 @@ $fake->withMfa($user->userId);                      // Authenticator app
 $fake->withMfa($user->userId, ['phone_id' => '1234']); // SMS, numbers keyed by MFA phone ID
 $fake->withValidMfaCode('654321');                  // Defaults to 123456
 $key = $fake->addApiKey(userId: $user->userId);     // Use $key->apiKeyToken in requests
+$fake->withUserReport(UserReportType::TopInviter, [['userId' => 'u1', 'email' => 'a@example.com']]);
+$fake->withOrgReport(OrgReportType::Growth, [['orgId' => 'o1', 'name' => 'Acme', 'numUsers' => 12]]);
+$fake->withChartMetrics(ChartMetric::Signups, ['2026-01-01' => 3, '2026-01-02' => 5]);
 ```
 
 Seeding is not recorded as a call.
@@ -1369,25 +1409,23 @@ protected function schedule(Schedule $schedule)
 
 ## Missing Features & Limitations
 
-These PropelAuth APIs aren't implemented in Earhart yet:
+Earhart covers every PropelAuth backend API endpoint. Not included:
 
-- **User and org insights** ([reference](https://docs.propelauth.com/reference/api/insights)): the user and org reports and chart metrics.
 - **Social login redirects and account linking**: these are browser flows; use the Socialite provider for login.
+- **OAuth2 and MCP authorisation servers**: also browser and OAuth-client flows, outside a backend API client.
 
-### Workarounds
+### Calling Other Endpoints
 
-The services' `makeRequest()` handles authentication, retries, errors and case conversion, so a subclass can reach any endpoint:
+If PropelAuth adds an endpoint before Earhart does, a subclass can use `makeRequest()`, which handles authentication, retries, errors and case conversion:
 
 ```php
 use LittleGreenMan\Earhart\Services\UserService;
 
 class AppUserService extends UserService
 {
-    public function topInviters(int $days = 30): array
+    public function newEndpoint(string $userId): array
     {
-        return $this->makeRequest('GET', '/api/backend/v1/user_report/top_inviter', [
-            'reportInterval' => $days,
-        ])['userReports'] ?? [];
+        return $this->makeRequest('GET', "/api/backend/v1/user/{$userId}/new_endpoint");
     }
 }
 ```

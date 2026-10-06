@@ -6,7 +6,10 @@ use Illuminate\Support\Facades\Http;
 use LittleGreenMan\Earhart\Exceptions\FeatureNotEnabledException;
 use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
 use LittleGreenMan\Earhart\Exceptions\StepUpMfaException;
+use LittleGreenMan\Earhart\PropelAuth\Insights\OrgReportType;
+use LittleGreenMan\Earhart\PropelAuth\Insights\UserReportType;
 use LittleGreenMan\Earhart\Services\CacheService;
+use LittleGreenMan\Earhart\Services\InsightsService;
 use LittleGreenMan\Earhart\Services\MfaService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 use LittleGreenMan\Earhart\Services\UserService;
@@ -164,5 +167,30 @@ describe('step-up MFA', function () {
 
         expect(endpointMfa()->verifyGrant('u1', 'DELETE_ACCOUNT', 'good'))->toBeTrue()
             ->and(endpointMfa()->verifyGrant('u1', 'DELETE_ACCOUNT', 'bad'))->toBeFalse();
+    });
+});
+
+describe('insights', function () {
+    test('rejects an interval the report does not offer', function () {
+        $insights = new InsightsService('key', 'https://auth.example.com', new CacheService(false));
+
+        expect(fn () => $insights->getUserReport(UserReportType::Churn, 90))
+            ->toThrow(\InvalidArgumentException::class, 'use one of: 7, 14, 30');
+
+        Http::assertNothingSent();
+    });
+
+    test('pages org reports', function () {
+        Http::fakeSequence()
+            ->push(['org_reports' => [['id' => 'r1', 'report_id' => 'x', 'org_id' => 'o1', 'name' => 'Acme', 'num_users' => 3, 'org_created_at' => 1700000000, 'extra_properties' => []]],
+                'current_page' => 0, 'total_count' => 2, 'page_size' => 1, 'has_more_results' => true])
+            ->push(['org_reports' => [['id' => 'r2', 'report_id' => 'x', 'org_id' => 'o2', 'name' => 'Beta', 'num_users' => 1, 'org_created_at' => 1700000000, 'extra_properties' => []]],
+                'current_page' => 1, 'total_count' => 2, 'page_size' => 1, 'has_more_results' => false]);
+
+        $insights = new InsightsService('key', 'https://auth.example.com', new CacheService(false));
+        $all = $insights->getOrgReport(OrgReportType::Growth, pageSize: 1)->allPages();
+
+        expect($all->map(fn ($org) => $org->name)->all())->toBe(['Acme', 'Beta'])
+            ->and($all->first()->numUsers)->toBe(3);
     });
 });

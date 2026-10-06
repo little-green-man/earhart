@@ -2,6 +2,17 @@
 
 All notable changes to `earhart` will be documented in this file.
 
+## [3.1.1] - 2026-10-07
+
+### Added
+
+- Insights: new `InsightsService` (`Earhart::insights()`) with `getUserReport()` (re-engagement, churn, top inviter, champion), `getOrgReport()` (re-engagement, churn, growth, attrition) and `getChartMetrics()` (signups, organisations created, active users, active organisations). Reports return `Report` pages of `UserReportRecord` or `OrgReportRecord`; charts return `ChartData`. Intervals are checked against each report's allowed values before any request
+- `EarhartFake` covers insights, with `withUserReport()`, `withOrgReport()` and `withChartMetrics()`
+
+### Changed
+
+- Keys inside a report's `extra_properties` (e.g. `num_invites`) keep PropelAuth's snake_case
+
 ## [3.1.0] - 2026-10-06
 
 ### Added

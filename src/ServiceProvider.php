@@ -5,6 +5,7 @@ namespace LittleGreenMan\Earhart;
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
 use LittleGreenMan\Earhart\Services\ApiKeyService;
 use LittleGreenMan\Earhart\Services\CacheService;
+use LittleGreenMan\Earhart\Services\InsightsService;
 use LittleGreenMan\Earhart\Services\MfaService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 use LittleGreenMan\Earhart\Services\UserService;
@@ -63,6 +64,14 @@ class ServiceProvider extends BaseServiceProvider
 
         $this->app->singleton(ApiKeyService::class, function ($app) {
             return new ApiKeyService(
+                apiKey: (string) config('services.propelauth.api_key'),
+                authUrl: (string) config('services.propelauth.auth_url'),
+                cache: $app->make(CacheService::class),
+            );
+        });
+
+        $this->app->singleton(InsightsService::class, function ($app) {
+            return new InsightsService(
                 apiKey: (string) config('services.propelauth.api_key'),
                 authUrl: (string) config('services.propelauth.auth_url'),
                 cache: $app->make(CacheService::class),

@@ -1,0 +1,30 @@
+{
+    "user_reports": [
+        {
+            "id": "df1940",
+            "report_id": "de58c",
+            "user_id": "813bef",
+            "user_created_at": 1701392700,
+            "username": "exampleUsername",
+            "first_name": "John",
+            "last_name": "Doe",
+            "email": "john@acmeinc.com",
+            "last_active_at": 1773250562,
+            "org_data": [
+                {
+                    "display_name": "Acme Inc",
+                    "org_id": "4f18c3",
+                    "user_role": "Owner"
+                }
+            ],
+            "extra_properties": {
+                "num_invites": 4
+            }
+        }
+    ],
+    "current_page": 0,
+    "total_count": 2,
+    "page_size": 10,
+    "has_more_results": false,
+    "report_time": 1773330458
+}

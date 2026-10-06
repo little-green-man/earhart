@@ -16,6 +16,7 @@ Thanks to [Laravel News](https://laravel-news.com) for the artwork.
 * **Access Tokens and Middleware**: Local access token verification, plus middleware for authenticated users, organisation membership, roles and permissions
 * **End-User API Keys**: Create, manage and validate the API keys your users create, with route middleware
 * **Step-Up MFA**: Ask for a fresh MFA code before sensitive actions
+* **Insights**: PropelAuth's user and organisation reports and chart metrics
 * **Testing Fake**: `Earhart::fake()` swaps in an in-memory PropelAuth with seeding, scripted failures and assertions
 * **Configuration**: Flexible webhook configuration with cache invalidation rules (v1.4+)
 

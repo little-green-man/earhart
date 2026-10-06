@@ -62,6 +62,15 @@ class FakeState
     /** @var array<string, array<string, int>> Validation counts keyed by Y-m-d date, then API key ID */
     public array $apiKeyUsage = [];
 
+    /** @var array<string, list<array<string, mixed>>> User report records (camelCase) keyed by report type */
+    public array $userReports = [];
+
+    /** @var array<string, list<array<string, mixed>>> Organisation report records (camelCase) keyed by report type */
+    public array $orgReports = [];
+
+    /** @var array<string, array<string, int>> Chart results keyed by metric, then Y-m-d date */
+    public array $chartMetrics = [];
+
     /** @var array<string, string> User IDs keyed by access token */
     public array $tokens = [];
 

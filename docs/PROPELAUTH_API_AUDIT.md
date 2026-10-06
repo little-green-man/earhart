@@ -1,7 +1,7 @@
 # PropelAuth API audit
 
 **Date:** 6 October 2026
-**Status:** All 3.0.0 fixes in section 5 are implemented on `release/3.0.0` (2.5 as the optional filters only, keeping `GET`). The section 4 endpoints marked 3.1, and end-user API keys, are implemented on `release/3.1.0`; insights remain.
+**Status:** All 3.0.0 fixes in section 5 are implemented on `release/3.0.0` (2.5 as the optional filters only, keeping `GET`). Every section 4 endpoint, including end-user API keys and insights, is implemented on `release/3.1.0` (3.1.1). OAuth2/MCP flows remain out of scope.
 **Scope:** `little-green-man/earhart` on branch `release/3.0.0` (commit `92651b0`), compared with the PropelAuth backend API reference.
 **Method:** Each method in `UserService` and `OrganisationService` was traced through `BaseApiService`'s camelCase-to-snake_case key conversion and compared with the **cURL** examples in PropelAuth's docs. The cURL tabs were used because they show the request and response shape on the wire; the JavaScript and Python tabs use SDK names, which sometimes differ (for example `enableAutoJoiningByDomain` in JavaScript is `autojoin_by_domain` on the wire).
 

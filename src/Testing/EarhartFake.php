@@ -6,10 +6,14 @@ use Illuminate\Support\Str;
 use LittleGreenMan\Earhart\Earhart;
 use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\Facades\PropelAuth;
+use LittleGreenMan\Earhart\PropelAuth\Insights\ChartMetric;
+use LittleGreenMan\Earhart\PropelAuth\Insights\OrgReportType;
+use LittleGreenMan\Earhart\PropelAuth\Insights\UserReportType;
 use LittleGreenMan\Earhart\PropelAuth\NewApiKey;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationData;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
 use LittleGreenMan\Earhart\Services\ApiKeyService;
+use LittleGreenMan\Earhart\Services\InsightsService;
 use LittleGreenMan\Earhart\Services\MfaService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 use LittleGreenMan\Earhart\Services\UserService;
@@ -42,6 +46,7 @@ class EarhartFake extends Earhart
         $this->organisationService = new FakeOrganisationService($this->state);
         $this->mfaService = new FakeMfaService($this->state);
         $this->apiKeyService = new FakeApiKeyService($this->state);
+        $this->insightsService = new FakeInsightsService($this->state);
     }
 
     // ============================================================
@@ -208,6 +213,52 @@ class EarhartFake extends Earhart
         return $service->store($userId, $orgId, $expiresAt, $metadata, $displayName);
     }
 
+    /**
+     * Set the users a user report returns. Each record needs userId and email; the rest default.
+     *
+     * @param  list<array<string, mixed>>  $records  UserReportRecord fields in camelCase
+     */
+    public function withUserReport(UserReportType $type, array $records): static
+    {
+        $this->state->userReports[$type->value] = array_map(fn (array $record) => $record + [
+            'userCreatedAt' => now()->getTimestamp(),
+            'lastActiveAt' => now()->getTimestamp(),
+            'orgData' => [],
+            'extraProperties' => [],
+        ], $records);
+
+        return $this;
+    }
+
+    /**
+     * Set the organisations an organisation report returns. Each record needs orgId and name; the rest default.
+     *
+     * @param  list<array<string, mixed>>  $records  OrgReportRecord fields in camelCase
+     */
+    public function withOrgReport(OrgReportType $type, array $records): static
+    {
+        $this->state->orgReports[$type->value] = array_map(fn (array $record) => $record + [
+            'numUsers' => 0,
+            'orgCreatedAt' => now()->getTimestamp(),
+            'extraProperties' => [],
+        ], $records);
+
+        return $this;
+    }
+
+    /**
+     * Set a chart metric's results.
+     *
+     * @param  array<string, int>  $results  Keyed by Y-m-d date
+     */
+    public function withChartMetrics(ChartMetric $metric, array $results): static
+    {
+        ksort($results);
+        $this->state->chartMetrics[$metric->value] = $results;
+
+        return $this;
+    }
+
     // ============================================================
     // Failures
     // ============================================================
@@ -215,7 +266,7 @@ class EarhartFake extends Earhart
     /**
      * Make the next call(s) fail.
      *
-     * @param  string  $target  A service class (UserService::class, OrganisationService::class, MfaService::class, ApiKeyService::class) or a method name
+     * @param  string  $target  A service class (UserService::class, OrganisationService::class, MfaService::class, ApiKeyService::class, InsightsService::class) or a method name
      * @param  int|PropelAuthException  $failure  An HTTP status, mapped to the matching exception, or the exception to throw
      */
     public function failNext(string $target, int|PropelAuthException $failure = 500, int $times = 1): static
@@ -405,6 +456,7 @@ class EarhartFake extends Earhart
         app()->instance(OrganisationService::class, $this->organisationService);
         app()->instance(MfaService::class, $this->mfaService);
         app()->instance(ApiKeyService::class, $this->apiKeyService);
+        app()->instance(InsightsService::class, $this->insightsService);
 
         PropelAuth::clearResolvedInstance('earhart');
 

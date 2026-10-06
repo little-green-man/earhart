@@ -13,6 +13,7 @@ use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
 use LittleGreenMan\Earhart\Services\ApiKeyService;
 use LittleGreenMan\Earhart\Services\CacheService;
+use LittleGreenMan\Earhart\Services\InsightsService;
 use LittleGreenMan\Earhart\Services\MfaService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 use LittleGreenMan\Earhart\Services\UserService;
@@ -27,6 +28,8 @@ class Earhart
     protected MfaService $mfaService;
 
     protected ApiKeyService $apiKeyService;
+
+    protected InsightsService $insightsService;
 
     protected CacheService $cacheService;
 
@@ -45,6 +48,7 @@ class Earhart
         $this->organisationService = new OrganisationService($apiKey, $authUrl, $this->cacheService);
         $this->mfaService = new MfaService($apiKey, $authUrl, $this->cacheService);
         $this->apiKeyService = new ApiKeyService($apiKey, $authUrl, $this->cacheService);
+        $this->insightsService = new InsightsService($apiKey, $authUrl, $this->cacheService);
     }
 
     /**
@@ -510,6 +514,14 @@ class Earhart
     public function apiKeys(): ApiKeyService
     {
         return $this->apiKeyService;
+    }
+
+    /**
+     * Get the insights (reports and chart metrics) service instance.
+     */
+    public function insights(): InsightsService
+    {
+        return $this->insightsService;
     }
 
     /**

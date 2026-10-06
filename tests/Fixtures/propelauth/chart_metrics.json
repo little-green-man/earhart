@@ -1,0 +1,16 @@
+{
+    "chart_type": "ActiveOrgs",
+    "cadence": "Daily",
+    "metrics": [
+        {
+            "date": "2026-01-01",
+            "result": 10,
+            "cadence_completed": false
+        },
+        {
+            "date": "2026-01-02",
+            "result": 14,
+            "cadence_completed": false
+        }
+    ]
+}

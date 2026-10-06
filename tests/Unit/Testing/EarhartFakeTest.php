@@ -16,6 +16,9 @@ use LittleGreenMan\Earhart\Exceptions\ValidationException;
 use LittleGreenMan\Earhart\Facades\PropelAuth;
 use LittleGreenMan\Earhart\Middleware\VerifyPropelAuthApiKey;
 use LittleGreenMan\Earhart\Middleware\VerifyPropelAuthUser;
+use LittleGreenMan\Earhart\PropelAuth\Insights\ChartMetric;
+use LittleGreenMan\Earhart\PropelAuth\Insights\OrgReportType;
+use LittleGreenMan\Earhart\PropelAuth\Insights\UserReportType;
 use LittleGreenMan\Earhart\Services\MfaService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 use LittleGreenMan\Earhart\Services\UserService;
@@ -378,5 +381,27 @@ describe('API keys', function () {
 
         expect($response->getStatusCode())->toBe(200)
             ->and($request->attributes->get('propelauth_user')->userId)->toBe($user->userId);
+    });
+});
+
+describe('insights', function () {
+    test('returns seeded reports and metrics', function () {
+        $fake = Earhart::fake()
+            ->withUserReport(UserReportType::TopInviter, [
+                ['userId' => 'u1', 'email' => 'a@example.com', 'extraProperties' => ['num_invites' => 4]],
+            ])
+            ->withOrgReport(OrgReportType::Growth, [['orgId' => 'o1', 'name' => 'Acme', 'numUsers' => 12]])
+            ->withChartMetrics(ChartMetric::Signups, ['2026-01-02' => 5, '2026-01-01' => 3, '2026-02-01' => 9]);
+
+        $users = PropelAuth::insights()->getUserReport(UserReportType::TopInviter, 30);
+        $orgs = PropelAuth::insights()->getOrgReport(OrgReportType::Growth);
+        $chart = PropelAuth::insights()->getChartMetrics(ChartMetric::Signups, startDate: '2026-01-01', endDate: '2026-01-31');
+
+        expect($users->items[0]->extraProperties)->toBe(['num_invites' => 4])
+            ->and($orgs->items[0]->numUsers)->toBe(12)
+            ->and($chart->toArray())->toBe(['2026-01-01' => 3, '2026-01-02' => 5])
+            ->and(fn () => PropelAuth::insights()->getUserReport(UserReportType::Churn, 90))->toThrow(\InvalidArgumentException::class);
+
+        $fake->assertCalled('getUserReport', fn ($args) => $args['type'] === UserReportType::TopInviter);
     });
 });
