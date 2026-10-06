@@ -2,6 +2,7 @@
 
 namespace LittleGreenMan\Earhart\Tests\Unit\Exceptions;
 
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use LittleGreenMan\Earhart\Exceptions\InvalidOrgException;
 use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
@@ -46,6 +47,16 @@ describe('PropelAuthException', function () {
                     && isset($logged['context'])
                     && $logged['context'] === $context;
             }));
+
+        $exception->report();
+    });
+
+    test('leaves the response body out of the log', function () {
+        $exception = new PropelAuthException('Test error', 500, ['endpoint' => '/x', 'response_body' => 'jane@example.com']);
+
+        Log::shouldReceive('error')
+            ->once()
+            ->with('Test error', \Mockery::on(fn ($logged) => $logged['context'] === ['endpoint' => '/x']));
 
         $exception->report();
     });
@@ -177,10 +188,25 @@ describe('RateLimitException', function () {
         expect($exception->retryAfterSeconds)->toBe(60);
     });
 
-    test('fromHeaders ensures minimum retry time', function () {
-        $exception = RateLimitException::fromHeaders('30');
+    test('fromHeaders honours short retry times', function () {
+        $exception = RateLimitException::fromHeaders('3');
 
-        expect($exception->retryAfterSeconds)->toBeGreaterThanOrEqual(60);
+        expect($exception->retryAfterSeconds)->toBe(3)
+            ->and($exception->retryAfterFromHeader)->toBeTrue();
+    });
+
+    test('fromHeaders parses an HTTP date', function () {
+        Carbon::setTestNow('2026-10-06 12:00:00');
+
+        $exception = RateLimitException::fromHeaders('Tue, 06 Oct 2026 12:00:30 GMT');
+
+        expect($exception->retryAfterSeconds)->toBe(30);
+
+        Carbon::setTestNow();
+    });
+
+    test('fromHeaders marks the default as not from the header', function () {
+        expect(RateLimitException::fromHeaders(null)->retryAfterFromHeader)->toBeFalse();
     });
 
     test('has 429 http status code', function () {

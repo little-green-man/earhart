@@ -3,6 +3,7 @@
 namespace LittleGreenMan\Earhart\Services;
 
 use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
+use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
 
@@ -10,6 +11,9 @@ class UserService extends BaseApiService
 {
     /**
      * Fetch user by ID with optional caching.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function getUser(string $userId, bool $fresh = false): UserData
     {
@@ -25,56 +29,55 @@ class UserService extends BaseApiService
      *
      * This method is typically called by authentication middleware to verify
      * that a session token is valid and retrieve the associated user data.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function validateToken(string $token): UserData
     {
         $response = $this->makeRequest('GET', '/api/backend/v1/user/me', [
             'token' => $token,
-        ]);
-
-        if (($response['status'] ?? 200) === 404) {
-            throw InvalidUserException::notFound('current');
-        }
+        ], fn () => InvalidUserException::notFound('current'));
 
         return UserData::fromArray($response);
     }
 
     /**
      * Fetch user by email address.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function getUserByEmail(string $email, bool $includeOrgs = true): UserData
     {
         $response = $this->makeRequest('GET', '/api/backend/v1/user/email', [
             'email' => $email,
             'includeOrgs' => $includeOrgs,
-        ]);
-
-        if (($response['status'] ?? 200) === 404) {
-            throw InvalidUserException::byEmail($email);
-        }
+        ], fn () => InvalidUserException::byEmail($email));
 
         return UserData::fromArray($response);
     }
 
     /**
      * Fetch user by username.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function getUserByUsername(string $username, bool $includeOrgs = true): UserData
     {
         $response = $this->makeRequest('GET', '/api/backend/v1/user/username', [
             'username' => $username,
             'includeOrgs' => $includeOrgs,
-        ]);
-
-        if (($response['status'] ?? 200) === 404) {
-            throw InvalidUserException::byUsername($username);
-        }
+        ], fn () => InvalidUserException::byUsername($username));
 
         return UserData::fromArray($response);
     }
 
     /**
      * Query users with pagination and filtering.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function queryUsers(
         ?string $emailOrUsername = null,
@@ -111,6 +114,8 @@ class UserService extends BaseApiService
 
     /**
      * Create a new user.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function createUser(
         string $email,
@@ -141,6 +146,9 @@ class UserService extends BaseApiService
 
     /**
      * Update user metadata.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function updateUser(
         string $userId,
@@ -165,7 +173,7 @@ class UserService extends BaseApiService
             fn ($v) => $v !== null,
         );
 
-        $this->makeRequest('PUT', "/api/backend/v1/user/{$userId}", $payload);
+        $this->makeRequest('PUT', "/api/backend/v1/user/{$userId}", $payload, fn () => InvalidUserException::notFound($userId));
         $this->cache->invalidateUser($userId);
 
         return true;
@@ -173,13 +181,16 @@ class UserService extends BaseApiService
 
     /**
      * Update user email address.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function updateUserEmail(string $userId, string $newEmail, bool $requireConfirmation = true): bool
     {
         $this->makeRequest('PUT', "/api/backend/v1/user/{$userId}/email", [
             'newEmail' => $newEmail,
             'requireEmailConfirmation' => $requireConfirmation,
-        ]);
+        ], fn () => InvalidUserException::notFound($userId));
 
         $this->cache->invalidateUser($userId);
 
@@ -188,13 +199,16 @@ class UserService extends BaseApiService
 
     /**
      * Update user password.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function updateUserPassword(string $userId, string $password, bool $askForUpdateOnLogin = false): bool
     {
         $this->makeRequest('PUT', "/api/backend/v1/user/{$userId}/password", [
             'password' => $password,
             'askUserToUpdatePasswordOnLogin' => $askForUpdateOnLogin,
-        ]);
+        ], fn () => InvalidUserException::notFound($userId));
 
         $this->cache->invalidateUser($userId);
 
@@ -203,10 +217,13 @@ class UserService extends BaseApiService
 
     /**
      * Clear user password.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function clearUserPassword(string $userId): bool
     {
-        $this->makeRequest('PUT', "/api/backend/v1/user/{$userId}/clear_password");
+        $this->makeRequest('PUT', "/api/backend/v1/user/{$userId}/clear_password", notFound: fn () => InvalidUserException::notFound($userId));
         $this->cache->invalidateUser($userId);
 
         return true;
@@ -214,6 +231,8 @@ class UserService extends BaseApiService
 
     /**
      * Create a magic link for passwordless login.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function createMagicLink(
         string $email,
@@ -238,6 +257,9 @@ class UserService extends BaseApiService
 
     /**
      * Create an access token for a user.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function createAccessToken(
         string $userId,
@@ -253,17 +275,20 @@ class UserService extends BaseApiService
             fn ($v) => $v !== null,
         );
 
-        $response = $this->makeRequest('POST', '/api/backend/v1/access_token', $payload);
+        $response = $this->makeRequest('POST', '/api/backend/v1/access_token', $payload, fn () => InvalidUserException::notFound($userId));
 
         return $response['accessToken'];
     }
 
     /**
      * Disable a user (block from login).
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function disableUser(string $userId): bool
     {
-        $this->makeRequest('POST', "/api/backend/v1/user/{$userId}/disable");
+        $this->makeRequest('POST', "/api/backend/v1/user/{$userId}/disable", notFound: fn () => InvalidUserException::notFound($userId));
         $this->cache->invalidateUser($userId);
 
         return true;
@@ -271,10 +296,13 @@ class UserService extends BaseApiService
 
     /**
      * Enable a user (unblock).
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function enableUser(string $userId): bool
     {
-        $this->makeRequest('POST', "/api/backend/v1/user/{$userId}/enable");
+        $this->makeRequest('POST', "/api/backend/v1/user/{$userId}/enable", notFound: fn () => InvalidUserException::notFound($userId));
         $this->cache->invalidateUser($userId);
 
         return true;
@@ -282,10 +310,13 @@ class UserService extends BaseApiService
 
     /**
      * Delete a user.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function deleteUser(string $userId): bool
     {
-        $this->makeRequest('DELETE', "/api/backend/v1/user/{$userId}");
+        $this->makeRequest('DELETE', "/api/backend/v1/user/{$userId}", notFound: fn () => InvalidUserException::notFound($userId));
         $this->cache->invalidateUser($userId);
 
         return true;
@@ -293,10 +324,13 @@ class UserService extends BaseApiService
 
     /**
      * Disable 2FA for a user.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function disable2FA(string $userId): bool
     {
-        $this->makeRequest('POST', "/api/backend/v1/user/{$userId}/disable_2fa");
+        $this->makeRequest('POST', "/api/backend/v1/user/{$userId}/disable_2fa", notFound: fn () => InvalidUserException::notFound($userId));
         $this->cache->invalidateUser($userId);
 
         return true;
@@ -304,22 +338,28 @@ class UserService extends BaseApiService
 
     /**
      * Resend email confirmation to a user.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function resendEmailConfirmation(string $userId): bool
     {
         $this->makeRequest('POST', '/api/backend/v1/resend_email_confirmation', [
             'userId' => $userId,
-        ]);
+        ], fn () => InvalidUserException::notFound($userId));
 
         return true;
     }
 
     /**
      * Logout user from all sessions.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function logoutAllSessions(string $userId): bool
     {
-        $this->makeRequest('POST', "/api/backend/v1/user/{$userId}/logout_all_sessions");
+        $this->makeRequest('POST', "/api/backend/v1/user/{$userId}/logout_all_sessions", notFound: fn () => InvalidUserException::notFound($userId));
         $this->cache->invalidateUser($userId);
 
         return true;
@@ -327,16 +367,21 @@ class UserService extends BaseApiService
 
     /**
      * Fetch user signup query parameters.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function getUserSignupParams(string $userId): array
     {
-        $response = $this->makeRequest('GET', "/api/backend/v1/user/{$userId}/signup_query_parameters");
+        $response = $this->makeRequest('GET', "/api/backend/v1/user/{$userId}/signup_query_parameters", notFound: fn () => InvalidUserException::notFound($userId));
 
         return $response['userSignupQueryParameters'] ?? [];
     }
 
     /**
      * Migrate user from external source.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function migrateUserFromExternal(
         string $email,
@@ -371,13 +416,16 @@ class UserService extends BaseApiService
 
     /**
      * Migrate user password from external source.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function migrateUserPassword(string $userId, string $passwordHash): bool
     {
         $this->makeRequest('POST', '/api/backend/v1/migrate_user/password', [
             'userId' => $userId,
             'passwordHash' => $passwordHash,
-        ]);
+        ], fn () => InvalidUserException::notFound($userId));
 
         return true;
     }
@@ -389,11 +437,7 @@ class UserService extends BaseApiService
      */
     protected function fetchUserFromAPI(string $userId): UserData
     {
-        $response = $this->makeRequest('GET', "/api/backend/v1/user/{$userId}");
-
-        if (($response['status'] ?? 200) === 404) {
-            throw InvalidUserException::notFound($userId);
-        }
+        $response = $this->makeRequest('GET', "/api/backend/v1/user/{$userId}", notFound: fn () => InvalidUserException::notFound($userId));
 
         return UserData::fromArray($response);
     }

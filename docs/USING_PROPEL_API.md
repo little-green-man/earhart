@@ -339,12 +339,14 @@ app('earhart')->disableUser('user_id_here');
 app('earhart')->enableUser('user_id_here');
 ```
 
+Both throw `InvalidUserException` if the user does not exist.
+
 #### Delete User
 
 > **API Reference**: [Delete User](https://docs.propelauth.com/reference/api/user#delete-user)
 
 ```php
-app('earhart')->deleteUser('user_id_here');
+app('earhart')->deleteUser('user_id_here'); // Throws InvalidUserException if the user does not exist
 ```
 
 #### Disable Two-Factor Authentication
@@ -795,6 +797,21 @@ class InvalidateUserCacheListener
 
 ## Error Handling
 
+Every API failure throws a `PropelAuthException` or one of its subclasses. Each has `getStatusCode()` and `getContext()`.
+
+| Exception | When |
+| --- | --- |
+| `InvalidUserException` | 404 on a call that takes a user ID, email or username |
+| `InvalidOrgException` | 404 on a call that takes an organisation ID |
+| `ValidationException` | 400 or 422. `getErrors()` returns PropelAuth's error body |
+| `UnauthorizedException` | 401 or 403, usually a wrong or under-privileged API key |
+| `RateLimitException` | 429 after retries are used up. `$retryAfterSeconds` holds the wait |
+| `PropelAuthException` | Anything else, including a 404 on calls naming both a user and an organisation |
+
+Write methods return `true` on success and throw on failure, so a missing user or organisation never passes silently.
+
+Messages hold only the status, method and endpoint. The response body, truncated, is in `getContext()['response_body']`; it may contain user data, so decide whether to send it to your error tracker.
+
 ### Common Exceptions
 
 ```php
@@ -808,6 +825,13 @@ try {
 } catch (InvalidUserException $e) {
     Log::warning('User not found', ['error' => $e->getMessage()]);
     return response()->json(['error' => 'User not found'], 404);
+}
+
+// Treat "already gone" as success, e.g. in a GDPR erase
+try {
+    app('earhart')->deleteUser($propelId);
+} catch (InvalidUserException $e) {
+    // Nothing to delete
 }
 
 // Organization not found
@@ -826,10 +850,24 @@ try {
 }
 ```
 
+### Timeouts and Retries
+
+Requests time out after `earhart.http.timeout` seconds (default 30; connect timeout 10). A 429 is retried `earhart.retries.times` times (default 2), waiting for PropelAuth's `Retry-After` or backing off exponentially, but never longer than `earhart.retries.max_delay_ms` (default 5,000). If `Retry-After` asks for longer, the exception is thrown at once.
+
+Waits block the PHP worker, so you may want no retries in web requests and more in queued jobs:
+
+```php
+// .env: PROPELAUTH_RETRY_TIMES=0
+
+// In a job
+config(['earhart.retries.times' => 3, 'earhart.retries.max_delay_ms' => 60_000]);
+```
+
 ### Graceful Error Handling
 
 ```php
 use Illuminate\Support\Facades\Cache;
+use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 
 public function getUserSafely(string $userId)
 {
@@ -841,11 +879,12 @@ public function getUserSafely(string $userId)
     } catch (RateLimitException $e) {
         // Rate limited - return cached data if available
         return Cache::get("user.{$userId}.fallback");
-    } catch (\Exception $e) {
+    } catch (PropelAuthException $e) {
         // Log unexpected errors
         Log::error('PropelAuth API error', [
             'user_id' => $userId,
-            'error' => $e->getMessage()
+            'status' => $e->getStatusCode(),
+            'error' => $e->getMessage(),
         ]);
         return null;
     }
@@ -994,7 +1033,7 @@ protected function schedule(Schedule $schedule)
 3. **Use webhooks** for real-time updates instead of polling the API
 4. **Invalidate cache** when data changes via webhooks
 5. **Use `fresh: true`** for critical operations where stale data could cause issues
-6. **Implement exponential backoff** when handling rate limit exceptions
+6. **Tune `earhart.retries`**: fail fast in web requests, retry in queued jobs
 7. **Never expose your API key** in client-side code or logs
 
 ## Missing Features & Limitations

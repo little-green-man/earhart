@@ -4,9 +4,12 @@ namespace LittleGreenMan\Earhart\Exceptions;
 
 class ValidationException extends PropelAuthException
 {
-    public function __construct(string $message, ?array $errors = null)
+    protected ?array $errors;
+
+    public function __construct(string $message, ?array $errors = null, int $statusCode = 400, ?array $context = null)
     {
-        parent::__construct($message, 400, $errors);
+        $this->errors = $errors;
+        parent::__construct($message, $statusCode, $context ?? $errors);
     }
 
     public static function invalidEmail(string $email): self
@@ -29,8 +32,11 @@ class ValidationException extends PropelAuthException
         return new self('Validation failed', $errors);
     }
 
+    /**
+     * The field errors. For an API response, this is PropelAuth's decoded error body.
+     */
     public function getErrors(): ?array
     {
-        return $this->context;
+        return $this->errors;
     }
 }

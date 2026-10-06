@@ -15,4 +15,40 @@ return [
         'enabled' => env('PROPELAUTH_CACHE_ENABLED', false),
         'ttl_minutes' => env('PROPELAUTH_CACHE_TTL', 60),
     ],
+
+    /*
+     |--------------------------------------------------------------------------
+     | HTTP
+     |--------------------------------------------------------------------------
+     |
+     | Timeouts, in seconds, for requests to the PropelAuth API.
+     |
+     */
+
+    'http' => [
+        'timeout' => env('PROPELAUTH_HTTP_TIMEOUT', 30),
+        'connect_timeout' => env('PROPELAUTH_HTTP_CONNECT_TIMEOUT', 10),
+    ],
+
+    /*
+     |--------------------------------------------------------------------------
+     | Rate-limit retries
+     |--------------------------------------------------------------------------
+     |
+     | How often a request that receives a 429 is retried. Waits honour
+     | PropelAuth's Retry-After header, otherwise back off exponentially from
+     | base_delay_ms. No wait exceeds max_delay_ms: if Retry-After asks for
+     | longer, the RateLimitException is thrown straight away.
+     |
+     | Set times to 0 to fail fast (e.g. in web requests) and let queued jobs
+     | retry instead. Values are read per request, so they can be changed at
+     | runtime with config().
+     |
+     */
+
+    'retries' => [
+        'times' => env('PROPELAUTH_RETRY_TIMES', 2),
+        'base_delay_ms' => env('PROPELAUTH_RETRY_BASE_DELAY_MS', 2000),
+        'max_delay_ms' => env('PROPELAUTH_RETRY_MAX_DELAY_MS', 5000),
+    ],
 ];

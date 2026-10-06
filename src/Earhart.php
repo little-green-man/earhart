@@ -2,6 +2,9 @@
 
 namespace LittleGreenMan\Earhart;
 
+use LittleGreenMan\Earhart\Exceptions\InvalidOrgException;
+use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
+use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationData;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationsData;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
@@ -38,6 +41,9 @@ class Earhart
 
     /**
      * Fetch user by ID.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function getUser(string $userId, bool $fresh = false): UserData
     {
@@ -46,6 +52,9 @@ class Earhart
 
     /**
      * Fetch user by email address.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function getUserByEmail(string $email, bool $includeOrgs = true): UserData
     {
@@ -54,6 +63,9 @@ class Earhart
 
     /**
      * Fetch user by username.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function getUserByUsername(string $username, bool $includeOrgs = true): UserData
     {
@@ -62,6 +74,8 @@ class Earhart
 
     /**
      * Query users with pagination and filtering.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function queryUsers(
         ?string $emailOrUsername = null,
@@ -74,6 +88,8 @@ class Earhart
 
     /**
      * Create a new user.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function createUser(
         string $email,
@@ -97,6 +113,9 @@ class Earhart
 
     /**
      * Update user metadata.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function updateUser(
         string $userId,
@@ -122,6 +141,9 @@ class Earhart
 
     /**
      * Update user email address.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function updateUserEmail(string $userId, string $newEmail, bool $requireConfirmation = true): bool
     {
@@ -130,6 +152,9 @@ class Earhart
 
     /**
      * Update user password.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function updateUserPassword(string $userId, string $password, bool $askForUpdateOnLogin = false): bool
     {
@@ -138,6 +163,9 @@ class Earhart
 
     /**
      * Clear user password.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function clearUserPassword(string $userId): bool
     {
@@ -146,6 +174,8 @@ class Earhart
 
     /**
      * Create a magic link for passwordless login.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function createMagicLink(
         string $email,
@@ -158,6 +188,9 @@ class Earhart
 
     /**
      * Create an access token for a user.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function createAccessToken(
         string $userId,
@@ -169,6 +202,9 @@ class Earhart
 
     /**
      * Disable a user (block from login).
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function disableUser(string $userId): bool
     {
@@ -177,6 +213,9 @@ class Earhart
 
     /**
      * Enable a user (unblock).
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function enableUser(string $userId): bool
     {
@@ -185,6 +224,9 @@ class Earhart
 
     /**
      * Delete a user.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function deleteUser(string $userId): bool
     {
@@ -193,6 +235,9 @@ class Earhart
 
     /**
      * Disable 2FA for a user.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function disable2FA(string $userId): bool
     {
@@ -201,6 +246,9 @@ class Earhart
 
     /**
      * Resend email confirmation to a user.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function resendEmailConfirmation(string $userId): bool
     {
@@ -209,6 +257,9 @@ class Earhart
 
     /**
      * Logout user from all sessions.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function logoutAllSessions(string $userId): bool
     {
@@ -217,6 +268,9 @@ class Earhart
 
     /**
      * Fetch user signup query parameters.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function getUserSignupParams(string $userId): array
     {
@@ -225,6 +279,8 @@ class Earhart
 
     /**
      * Migrate user from external source.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function migrateUserFromExternal(
         string $email,
@@ -255,6 +311,9 @@ class Earhart
      *
      * @param  string  $userId  The user ID
      * @param  string  $passwordHash  The password hash (must be pre-hashed using bcrypt, scrypt, or argon2)
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function migrateUserPassword(string $userId, string $passwordHash): bool
     {
@@ -267,6 +326,9 @@ class Earhart
 
     /**
      * Fetch organization by ID.
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function getOrganisation(string $id): OrganisationData
     {
@@ -275,6 +337,8 @@ class Earhart
 
     /**
      * Fetch all organisations with pagination.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function getOrganisations(int $pageSize = 1000)
     {
@@ -295,6 +359,9 @@ class Earhart
      * Fetch users in organisation.
      *
      * @return array<UserData>
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function getUsersInOrganisation(string $organisationId): array
     {

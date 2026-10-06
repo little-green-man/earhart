@@ -3,6 +3,7 @@
 namespace LittleGreenMan\Earhart\Services;
 
 use LittleGreenMan\Earhart\Exceptions\InvalidOrgException;
+use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationData;
 use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
@@ -11,6 +12,9 @@ class OrganisationService extends BaseApiService
 {
     /**
      * Fetch organisation by ID.
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function getOrganisation(string $orgId, bool $fresh = false): OrganisationData
     {
@@ -23,6 +27,8 @@ class OrganisationService extends BaseApiService
 
     /**
      * Query organisations with pagination.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function queryOrganisations(
         ?string $orderBy = null,
@@ -57,13 +63,16 @@ class OrganisationService extends BaseApiService
 
     /**
      * Fetch users in organisation.
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function getOrganisationUsers(string $orgId, int $pageSize = 100): PaginatedResult
     {
         $response = $this->makeRequest('GET', "/api/backend/v1/user/org/{$orgId}", [
             'pageSize' => $pageSize,
             'includeOrgs' => false,
-        ]);
+        ], fn () => InvalidOrgException::notFound($orgId));
 
         // Convert arrays to UserData objects for consistency
         $users = array_map(
@@ -77,6 +86,8 @@ class OrganisationService extends BaseApiService
 
     /**
      * Create a new organisation.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function createOrganisation(string $name, ?string $slug = null, ?array $metadata = null): string
     {
@@ -96,6 +107,9 @@ class OrganisationService extends BaseApiService
 
     /**
      * Update organisation.
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function updateOrganisation(string $orgId, ?string $name = null, ?array $metadata = null): bool
     {
@@ -107,7 +121,7 @@ class OrganisationService extends BaseApiService
             fn ($v) => $v !== null,
         );
 
-        $this->makeRequest('PUT', "/api/backend/v1/org/{$orgId}", $payload);
+        $this->makeRequest('PUT', "/api/backend/v1/org/{$orgId}", $payload, fn () => InvalidOrgException::notFound($orgId));
         $this->cache->invalidateOrganisation($orgId);
 
         return true;
@@ -115,14 +129,13 @@ class OrganisationService extends BaseApiService
 
     /**
      * Delete organisation.
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function deleteOrganisation(string $orgId): bool
     {
-        $response = $this->makeRequest('DELETE', "/api/backend/v1/org/{$orgId}");
-
-        if (($response['status'] ?? 200) === 404) {
-            throw InvalidOrgException::notFound($orgId);
-        }
+        $this->makeRequest('DELETE', "/api/backend/v1/org/{$orgId}", notFound: fn () => InvalidOrgException::notFound($orgId));
 
         $this->cache->invalidateOrganisation($orgId);
 
@@ -131,6 +144,8 @@ class OrganisationService extends BaseApiService
 
     /**
      * Add user to organisation.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function addUserToOrganisation(string $orgId, string $userId, ?string $role = null): bool
     {
@@ -151,6 +166,8 @@ class OrganisationService extends BaseApiService
 
     /**
      * Invite user to organisation.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function inviteUserToOrganisation(string $orgId, string $email, ?string $role = null): bool
     {
@@ -170,6 +187,8 @@ class OrganisationService extends BaseApiService
 
     /**
      * Remove user from organisation.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function removeUserFromOrganisation(string $orgId, string $userId): bool
     {
@@ -184,6 +203,8 @@ class OrganisationService extends BaseApiService
 
     /**
      * Change user role in organisation.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function changeUserRole(string $orgId, string $userId, string $role): bool
     {
@@ -199,6 +220,8 @@ class OrganisationService extends BaseApiService
 
     /**
      * Get role mappings.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function getRoleMappings(): array
     {
@@ -209,12 +232,15 @@ class OrganisationService extends BaseApiService
 
     /**
      * Subscribe organisation to role mapping.
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function subscribeOrgToRoleMapping(string $orgId, string $mappingId): bool
     {
         $this->makeRequest('PUT', "/api/backend/v1/org/{$orgId}", [
             'customRoleMappingId' => $mappingId,
-        ]);
+        ], fn () => InvalidOrgException::notFound($orgId));
         $this->cache->invalidateOrganisation($orgId);
 
         return true;
@@ -222,6 +248,8 @@ class OrganisationService extends BaseApiService
 
     /**
      * Get pending invites.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function getPendingInvites(?string $orgId = null): PaginatedResult
     {
@@ -239,6 +267,8 @@ class OrganisationService extends BaseApiService
 
     /**
      * Revoke pending invite.
+     *
+     * @throws PropelAuthException On any API failure
      */
     public function revokePendingInvite(string $orgId, string $inviteeEmail): bool
     {
@@ -252,10 +282,13 @@ class OrganisationService extends BaseApiService
 
     /**
      * Allow organisation to setup SAML.
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function allowOrgToSetupSAML(string $orgId): bool
     {
-        $this->makeRequest('POST', "/api/backend/v1/org/{$orgId}/allow_saml");
+        $this->makeRequest('POST', "/api/backend/v1/org/{$orgId}/allow_saml", notFound: fn () => InvalidOrgException::notFound($orgId));
         $this->cache->invalidateOrganisation($orgId);
 
         return true;
@@ -263,10 +296,13 @@ class OrganisationService extends BaseApiService
 
     /**
      * Disallow organisation to setup SAML.
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function disallowOrgToSetupSAML(string $orgId): bool
     {
-        $this->makeRequest('POST', "/api/backend/v1/org/{$orgId}/disallow_saml");
+        $this->makeRequest('POST', "/api/backend/v1/org/{$orgId}/disallow_saml", notFound: fn () => InvalidOrgException::notFound($orgId));
         $this->cache->invalidateOrganisation($orgId);
 
         return true;
@@ -274,33 +310,42 @@ class OrganisationService extends BaseApiService
 
     /**
      * Create SAML connection link.
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function createSAMLConnectionLink(string $orgId): string
     {
-        $response = $this->makeRequest('POST', "/api/backend/v1/org/{$orgId}/create_saml_connection_link");
+        $response = $this->makeRequest('POST', "/api/backend/v1/org/{$orgId}/create_saml_connection_link", notFound: fn () => InvalidOrgException::notFound($orgId));
 
         return $response['url'] ?? '';
     }
 
     /**
      * Fetch SAML SP metadata.
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function fetchSAMLMetadata(string $orgId): string
     {
-        $response = $this->makeRequest('GET', "/api/backend/v1/saml_sp_metadata/{$orgId}");
+        $response = $this->makeRequest('GET', "/api/backend/v1/saml_sp_metadata/{$orgId}", notFound: fn () => InvalidOrgException::notFound($orgId));
 
         return $response['metadata'] ?? '';
     }
 
     /**
      * Set SAML IdP metadata.
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function setSAMLIdPMetadata(string $orgId, string $metadataXml): bool
     {
         $this->makeRequest('POST', '/api/backend/v1/saml_idp_metadata', [
             'orgId' => $orgId,
             'idpMetadata' => $metadataXml,
-        ]);
+        ], fn () => InvalidOrgException::notFound($orgId));
         $this->cache->invalidateOrganisation($orgId);
 
         return true;
@@ -308,10 +353,13 @@ class OrganisationService extends BaseApiService
 
     /**
      * Enable SAML connection.
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function enableSAMLConnection(string $orgId): bool
     {
-        $this->makeRequest('POST', "/api/backend/v1/saml_idp_metadata/go_live/{$orgId}");
+        $this->makeRequest('POST', "/api/backend/v1/saml_idp_metadata/go_live/{$orgId}", notFound: fn () => InvalidOrgException::notFound($orgId));
         $this->cache->invalidateOrganisation($orgId);
 
         return true;
@@ -319,10 +367,13 @@ class OrganisationService extends BaseApiService
 
     /**
      * Delete SAML connection.
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function deleteSAMLConnection(string $orgId): bool
     {
-        $this->makeRequest('DELETE', "/api/backend/v1/saml_idp_metadata/{$orgId}");
+        $this->makeRequest('DELETE', "/api/backend/v1/saml_idp_metadata/{$orgId}", notFound: fn () => InvalidOrgException::notFound($orgId));
         $this->cache->invalidateOrganisation($orgId);
 
         return true;
@@ -330,12 +381,15 @@ class OrganisationService extends BaseApiService
 
     /**
      * Migrate organisation to isolated.
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
      */
     public function migrateOrgToIsolated(string $orgId): bool
     {
         $this->makeRequest('POST', '/api/backend/v1/isolate_org', [
             'orgId' => $orgId,
-        ]);
+        ], fn () => InvalidOrgException::notFound($orgId));
         $this->cache->invalidateOrganisation($orgId);
 
         return true;
@@ -348,11 +402,7 @@ class OrganisationService extends BaseApiService
      */
     protected function fetchOrgFromAPI(string $orgId): OrganisationData
     {
-        $response = $this->makeRequest('GET', "/api/backend/v1/org/{$orgId}");
-
-        if (($response['status'] ?? 200) === 404) {
-            throw InvalidOrgException::notFound($orgId);
-        }
+        $response = $this->makeRequest('GET', "/api/backend/v1/org/{$orgId}", notFound: fn () => InvalidOrgException::notFound($orgId));
 
         return OrganisationData::fromArray($response);
     }

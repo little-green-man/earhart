@@ -2,6 +2,31 @@
 
 All notable changes to `earhart` will be documented in this file.
 
+## [3.0.0] - 2026-10-06
+
+Contains breaking changes. See [UPGRADE-3.0.md](UPGRADE-3.0.md).
+
+### Changed (breaking)
+
+- A 404 from any API call now throws. Calls on a user ID throw `InvalidUserException`, calls on an organisation ID throw `InvalidOrgException`, and calls that name both (`addUserToOrganisation()`, `removeUserFromOrganisation()`, `changeUserRole()`) throw a `PropelAuthException` with status 404. Previously writes such as `disableUser()`, `enableUser()` and `deleteUser()` returned `true` for a missing user. Write methods still return `true`; failures always throw
+- API failures throw `PropelAuthException` (or a subclass) instead of a bare `\Exception`: `ValidationException` for 400/422, the new `UnauthorizedException` for 401/403, `RateLimitException` for 429. Code catching `\Exception` still works
+- Exception messages no longer contain the response body (`PropelAuth API error: 500 on DELETE /api/backend/v1/user/{id}`). The body, truncated to 1,024 characters, is in `getContext()['response_body']` and is left out of `report()` logging
+- `RateLimitException::fromHeaders()` no longer floors `Retry-After` at 60 seconds, and also accepts an HTTP date
+- Rate-limit retries honour `Retry-After`, are capped by `earhart.retries.max_delay_ms` (default 5 s) and fail at once when `Retry-After` exceeds the cap
+- Internal: `makeRequest()`/`sendRequest()` no longer add a `status` key to the response, so a PropelAuth payload with its own `status` key is no longer misread. `makeRequest()` takes an optional `$notFound` closure. The protected `$maxRetries` and `$initialRetryDelay` properties are removed
+
+### Added
+
+- `earhart.http.timeout` and `earhart.http.connect_timeout` config (defaults 30 s and 10 s)
+- `earhart.retries.times`, `base_delay_ms` and `max_delay_ms` config. `times` = 0 disables retries
+- `ValidationException::getErrors()` returns PropelAuth's decoded error body for API failures
+- `RateLimitException::$retryAfterFromHeader`
+- `@throws` docs on every public API method
+
+### Fixed
+
+- Retry jitter was always 0; it is now computed in milliseconds
+
 ## [2.1.1] - 2026-09-28
 
 ### Removed

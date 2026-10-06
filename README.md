@@ -68,7 +68,7 @@ Optionally, publish Earhart's config file to customise caching:
 php artisan vendor:publish --provider="LittleGreenMan\Earhart\ServiceProvider" --tag="config"
 ```
 
-This creates `config/earhart.php` where you can customise cache defaults. Credentials always come from `services.propelauth`.
+This creates `config/earhart.php` where you can customise caching, HTTP timeouts and rate-limit retries. Credentials always come from `services.propelauth`.
 
 ### 5. Update your database
 

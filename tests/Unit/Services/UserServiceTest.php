@@ -5,7 +5,10 @@ namespace LittleGreenMan\Earhart\Tests\Unit\Services;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
 use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
+use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\Exceptions\RateLimitException;
+use LittleGreenMan\Earhart\Exceptions\UnauthorizedException;
+use LittleGreenMan\Earhart\Exceptions\ValidationException;
 use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
 use LittleGreenMan\Earhart\Services\CacheService;
@@ -584,6 +587,169 @@ describe('UserService', function () {
 
             Sleep::assertSleptTimes(1);
         });
+
+        test('waits for Retry-After when it is within the cap', function () {
+            Http::fakeSequence('https://auth.example.com/api/backend/v1/user/user123')
+                ->push([], 429, ['Retry-After' => '3'])
+                ->push(mockUserResponse());
+
+            createUserService()->getUser('user123');
+
+            Sleep::assertSequence([Sleep::for(3000)->milliseconds()]);
+        });
+
+        test('fails at once when Retry-After exceeds the cap', function () {
+            Http::fake([
+                'https://auth.example.com/api/backend/v1/user/user123' => Http::response([], 429, ['Retry-After' => '60']),
+            ]);
+
+            expect(fn () => createUserService()->getUser('user123'))->toThrow(RateLimitException::class);
+
+            Http::assertSentCount(1);
+            Sleep::assertNeverSlept();
+        });
+
+        test('backs off exponentially without Retry-After, capped', function () {
+            config(['earhart.retries.times' => 3, 'earhart.retries.base_delay_ms' => 2000, 'earhart.retries.max_delay_ms' => 5000]);
+
+            Http::fake([
+                'https://auth.example.com/api/backend/v1/user/user123' => Http::response([], 429),
+            ]);
+
+            expect(fn () => createUserService()->getUser('user123'))->toThrow(RateLimitException::class);
+
+            Http::assertSentCount(4);
+            Sleep::assertSleptTimes(3);
+            Sleep::assertSlept(fn ($duration) => $duration->totalMilliseconds >= 2000 && $duration->totalMilliseconds <= 2200, 1);
+            Sleep::assertSlept(fn ($duration) => $duration->totalMilliseconds >= 4000 && $duration->totalMilliseconds <= 4400, 1);
+            Sleep::assertSlept(fn ($duration) => (int) $duration->totalMilliseconds === 5000, 1);
+        });
+
+        test('does not retry when retries are disabled', function () {
+            config(['earhart.retries.times' => 0]);
+
+            Http::fake([
+                'https://auth.example.com/api/backend/v1/user/user123' => Http::response([], 429),
+            ]);
+
+            expect(fn () => createUserService()->getUser('user123'))->toThrow(RateLimitException::class);
+
+            Http::assertSentCount(1);
+            Sleep::assertNeverSlept();
+        });
+    });
+
+    describe('typed errors', function () {
+        test('throws PropelAuthException with status and context, keeping the body out of the message', function () {
+            Http::fake([
+                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(['error' => 'jane@example.com broke it'], 500),
+            ]);
+
+            try {
+                createUserService()->getUser('user123');
+                throw new \LogicException('Expected exception');
+            } catch (PropelAuthException $e) {
+                expect($e)->toBeInstanceOf(PropelAuthException::class)
+                    ->and($e->getStatusCode())->toBe(500)
+                    ->and($e->getMessage())->toBe('PropelAuth API error: 500 on GET /api/backend/v1/user/user123')
+                    ->and($e->getMessage())->not->toContain('jane@example.com')
+                    ->and($e->getContext()['response_body'])->toContain('jane@example.com');
+            }
+        });
+
+        test('truncates long response bodies in context', function () {
+            Http::fake([
+                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(str_repeat('x', 5000), 500),
+            ]);
+
+            try {
+                createUserService()->getUser('user123');
+                throw new \LogicException('Expected exception');
+            } catch (PropelAuthException $e) {
+                expect(strlen($e->getContext()['response_body']))->toBeLessThanOrEqual(PropelAuthException::MAX_BODY_LENGTH + 3);
+            }
+        });
+
+        test('maps 400 and 422 to ValidationException with the field errors', function (int $status) {
+            Http::fake([
+                'https://auth.example.com/api/backend/v1/user/' => Http::response(['email' => ['Already taken']], $status),
+            ]);
+
+            try {
+                createUserService()->createUser('a@example.com');
+                throw new \LogicException('Expected exception');
+            } catch (ValidationException $e) {
+                expect($e->getStatusCode())->toBe($status)
+                    ->and($e->getErrors())->toBe(['email' => ['Already taken']]);
+            }
+        })->with([400, 422]);
+
+        test('maps 401 and 403 to UnauthorizedException', function (int $status) {
+            Http::fake([
+                'https://auth.example.com/api/backend/v1/user/user123' => Http::response([], $status),
+            ]);
+
+            expect(fn () => createUserService()->getUser('user123'))->toThrow(UnauthorizedException::class);
+        })->with([401, 403]);
+
+        test('does not retry non-rate-limit errors', function () {
+            Http::fake([
+                'https://auth.example.com/api/backend/v1/user/user123' => Http::response([], 500),
+            ]);
+
+            expect(fn () => createUserService()->getUser('user123'))->toThrow(PropelAuthException::class);
+
+            Http::assertSentCount(1);
+        });
+
+        test('a status key in the response body does not mask success', function () {
+            Http::fake([
+                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(mockUserResponse() + ['status' => 404]),
+            ]);
+
+            expect(createUserService()->getUser('user123')->userId)->toBe('user123');
+        });
+
+        test('uses the configured timeouts', function () {
+            config(['earhart.http.timeout' => 7, 'earhart.http.connect_timeout' => 2]);
+
+            $options = null;
+
+            Http::fake([
+                'https://auth.example.com/api/backend/v1/user/user123' => function ($request, $requestOptions) use (&$options) {
+                    $options = $requestOptions;
+
+                    return Http::response(mockUserResponse());
+                },
+            ]);
+
+            createUserService()->getUser('user123');
+
+            expect($options['timeout'])->toEqual(7)
+                ->and($options['connect_timeout'])->toEqual(2);
+        });
+    });
+
+    describe('writes on a missing user', function () {
+        test('throws InvalidUserException instead of returning true', function (string $method, string $endpoint, \Closure $call) {
+            Http::fake([
+                "https://auth.example.com{$endpoint}" => Http::response(['error' => 'not found'], 404),
+            ]);
+
+            try {
+                $call(createUserService());
+                throw new \LogicException('Expected exception');
+            } catch (InvalidUserException $e) {
+                expect($e->getStatusCode())->toBe(404)
+                    ->and($e->getContext())->toBe(['user_id' => 'gone']);
+            }
+        })->with([
+            'disableUser' => ['POST', '/api/backend/v1/user/gone/disable', fn ($s) => $s->disableUser('gone')],
+            'enableUser' => ['POST', '/api/backend/v1/user/gone/enable', fn ($s) => $s->enableUser('gone')],
+            'deleteUser' => ['DELETE', '/api/backend/v1/user/gone', fn ($s) => $s->deleteUser('gone')],
+            'updateUser' => ['PUT', '/api/backend/v1/user/gone', fn ($s) => $s->updateUser('gone', firstName: 'X')],
+            'logoutAllSessions' => ['POST', '/api/backend/v1/user/gone/logout_all_sessions', fn ($s) => $s->logoutAllSessions('gone')],
+        ]);
     });
 
     describe('error handling', function () {

@@ -4,6 +4,7 @@ namespace LittleGreenMan\Earhart\Tests\Unit\Services;
 
 use Illuminate\Support\Facades\Http;
 use LittleGreenMan\Earhart\Exceptions\InvalidOrgException;
+use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\Exceptions\RateLimitException;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationData;
 use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
@@ -247,6 +248,27 @@ describe('OrganisationService', function () {
             $service = createOrganisationService();
 
             expect(fn () => $service->deleteOrganisation('invalid'))->toThrow(InvalidOrgException::class);
+        });
+
+        test('other organisation writes throw when the organisation is not found', function (string $endpoint, \Closure $call) {
+            Http::fake([
+                "https://auth.example.com{$endpoint}" => Http::response([], 404),
+            ]);
+
+            expect(fn () => $call(createOrganisationService()))->toThrow(InvalidOrgException::class);
+        })->with([
+            'updateOrganisation' => ['/api/backend/v1/org/gone', fn ($s) => $s->updateOrganisation('gone', name: 'X')],
+            'allowOrgToSetupSAML' => ['/api/backend/v1/org/gone/allow_saml', fn ($s) => $s->allowOrgToSetupSAML('gone')],
+            'migrateOrgToIsolated' => ['/api/backend/v1/isolate_org', fn ($s) => $s->migrateOrgToIsolated('gone')],
+        ]);
+
+        test('membership writes throw a 404 PropelAuthException', function () {
+            Http::fake([
+                'https://auth.example.com/api/backend/v1/org/remove_user' => Http::response([], 404),
+            ]);
+
+            expect(fn () => createOrganisationService()->removeUserFromOrganisation('org1', 'user1'))
+                ->toThrow(PropelAuthException::class, 'PropelAuth API error: 404 on POST /api/backend/v1/org/remove_user');
         });
     });
 
