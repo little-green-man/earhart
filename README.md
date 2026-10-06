@@ -12,7 +12,11 @@ Thanks to [Laravel News](https://laravel-news.com) for the artwork.
 
 * **Authentication**: Socialite integration with easy route controllers for PropelAuth OAuth
 * **Secure Webhook Handling that drives Events**: Verified webhooks fire events you can listen for in your application when e.g. user details change at PropelAuth
-* **API Integration**: Built-in PropelAuth API client for querying data and to build functionality into your app seamlessly.
+* **API Integration**: Built-in PropelAuth API client for users, organisations, SAML/OIDC SSO and SCIM groups, with typed exceptions and configurable retries
+* **Access Tokens and Middleware**: Local access token verification, plus middleware for authenticated users, organisation membership, roles and permissions
+* **End-User API Keys**: Create, manage and validate the API keys your users create, with route middleware
+* **Step-Up MFA**: Ask for a fresh MFA code before sensitive actions
+* **Testing Fake**: `Earhart::fake()` swaps in an in-memory PropelAuth with seeding, scripted failures and assertions
 * **Configuration**: Flexible webhook configuration with cache invalidation rules (v1.4+)
 
 ## Installation
