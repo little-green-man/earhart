@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use LittleGreenMan\Earhart\Exceptions\InvalidTokenException;
+use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\Middleware\VerifyPropelAuthUser;
 use LittleGreenMan\Earhart\Services\CacheService;
 use LittleGreenMan\Earhart\Services\UserService;
@@ -106,6 +107,19 @@ describe('verifyAccessToken', function () {
         'no user_id' => [fn () => signToken(testKeys()[0], ['user_id' => null])],
         'garbage' => [fn () => 'not-a-jwt'],
     ]);
+
+    test('a failure fetching the verifier key is not reported as an invalid token', function () {
+        Http::fake(['https://down.example.com/*' => Http::response([], 500)]);
+        $service = new UserService('test-api-key', 'https://down.example.com', new CacheService(false));
+
+        try {
+            $service->verifyAccessToken(signToken(testKeys()[0]));
+            throw new \LogicException('Expected exception');
+        } catch (PropelAuthException $e) {
+            expect($e)->not->toBeInstanceOf(InvalidTokenException::class)
+                ->and($e->getStatusCode())->toBe(500);
+        }
+    });
 
     test('allows 60 seconds of clock skew', function () {
         expect(tokenService()->verifyAccessToken(signToken(testKeys()[0], ['exp' => time() - 30]))->userId)->not->toBeEmpty();

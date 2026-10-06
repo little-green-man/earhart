@@ -8,7 +8,7 @@ use LittleGreenMan\Earhart\Testing\EarhartFake;
 
 /**
  * @method static \LittleGreenMan\Earhart\PropelAuth\UserData getUser(string $userId, bool $fresh = false, bool $includeOrgs = true)
- * @method static \LittleGreenMan\Earhart\PropelAuth\UserData validateToken(string $token)
+ * @method static \LittleGreenMan\Earhart\PropelAuth\UserData validateToken(string $token, bool $fresh = false)
  * @method static \LittleGreenMan\Earhart\PropelAuth\AccessToken verifyAccessToken(string $token)
  * @method static \LittleGreenMan\Earhart\PropelAuth\UserData getUserByEmail(string $email, bool $includeOrgs = true, ?string $isolatedOrgId = null)
  * @method static \LittleGreenMan\Earhart\PropelAuth\UserData getUserByUsername(string $username, bool $includeOrgs = true, ?string $isolatedOrgId = null)

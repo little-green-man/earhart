@@ -52,7 +52,7 @@ describe('CacheService', function () {
 
         expect($service->get('test-key', fn () => 'value'))->toBe('value')
             ->and($service->get('test-key', fn () => 'other'))->toBe('value')
-            ->and(Cache::get('propelauth.test-key'))->toBe('value');
+            ->and(Cache::get('propelauth.v3.test-key'))->toBe('value');
     })->group('unit', 'fast');
 
     test('forget returns true when cache is disabled', function () {
@@ -68,7 +68,7 @@ describe('CacheService', function () {
         $service->get('test-key', fn () => 'value');
 
         expect($service->forget('test-key'))->toBeTrue()
-            ->and(Cache::has('propelauth.test-key'))->toBeFalse();
+            ->and(Cache::has('propelauth.v3.test-key'))->toBeFalse();
     })->group('unit', 'fast');
 
     test('flush does nothing when cache is disabled', function () {
@@ -76,7 +76,7 @@ describe('CacheService', function () {
 
         $service->flush();
 
-        expect(Cache::has('propelauth.generation'))->toBeFalse();
+        expect(Cache::has('propelauth.v3.generation'))->toBeFalse();
     })->group('unit', 'fast');
 
     test('flush invalidates all propelauth cache when enabled', function () {
@@ -118,7 +118,7 @@ describe('CacheService', function () {
 
         $service->invalidateUser('user123');
 
-        expect(Cache::has('propelauth.user.user123'))->toBeFalse();
+        expect(Cache::has('propelauth.v3.user.user123'))->toBeFalse();
     })->group('unit', 'fast');
 
     test('invalidateOrganisation forgets organisation caches', function () {
@@ -128,8 +128,8 @@ describe('CacheService', function () {
 
         $service->invalidateOrganisation('org456');
 
-        expect(Cache::has('propelauth.org.org456'))->toBeFalse()
-            ->and(Cache::has('propelauth.org.org456.users'))->toBeFalse();
+        expect(Cache::has('propelauth.v3.org.org456'))->toBeFalse()
+            ->and(Cache::has('propelauth.v3.org.org456.users'))->toBeFalse();
     })->group('unit', 'fast');
 
     test('default ttl is 60 minutes', function () {

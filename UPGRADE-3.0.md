@@ -181,6 +181,12 @@ v2's `validateToken()` called `/api/backend/v1/user/me`, which PropelAuth doesn'
 - an invalid or expired token throws `InvalidTokenException` (v2 threw `InvalidUserException`); `VerifyPropelAuthUser` still returns 401
 - the first verification fetches your environment's public key from `/api/v1/token_verification_metadata` with your API key, then caches it for a day. If your key can't make that request, set `PROPELAUTH_VERIFIER_KEY` to the public key from the **Backend Integration** page (`\n` escapes are accepted)
 - `verifyAccessToken()` is new: it returns the token's claims without fetching the user
+- with caching enabled, the fetched user can be up to the cache TTL old unless PropelAuth's webhooks invalidate it; `validateToken($token, fresh: true)` always fetches
+- `VerifyPropelAuthUser` returns 401 only for an invalid token. In v2 it turned any exception, including PropelAuth outages and exceptions from your own code later in the request, into a 401. Those now reach your exception handler. `VerifyPropelAuthOrg` likewise no longer turns your code's exceptions into a 500 JSON response
+
+### Cache
+
+Cache keys now start `propelauth.v3.`, so entries cached by v2 aren't read. Nothing to do; old entries expire on their own, or run `php artisan cache:clear`.
 
 ### Memberships
 

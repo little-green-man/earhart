@@ -93,3 +93,8 @@ describe('VerifyPropelAuthOrg', function () {
         expect($response->getStatusCode())->toBe(403);
     });
 });
+
+test('does not swallow exceptions from the app', function () {
+    expect(fn () => orgMiddleware()->handle(orgRequest(memberOf('org123'), ['org_id' => 'org123']), fn () => throw new \RuntimeException('app bug')))
+        ->toThrow(\RuntimeException::class, 'app bug');
+});

@@ -20,6 +20,8 @@ These come from an audit against PropelAuth's docs, Postman collection and offic
 - `subscribeOrgToRoleMapping()` sends `custom_role_mapping_name`; its second argument is renamed from `$mappingId` to `$mappingName`
 - `OrganisationData::$maxOrgMembers` (always null) is renamed `$maxUsers` and now populated
 - `role` is required on `addUserToOrganisation()` and `inviteUserToOrganisation()`, as PropelAuth requires it
+- Cache keys are now prefixed `propelauth.v3.`, so entries cached by 2.x (with the old data shapes) are never read back
+- `VerifyPropelAuthUser` returns 401 only for invalid tokens; other failures, such as PropelAuth being unreachable or a wrong API key, now reach your exception handler. It and `VerifyPropelAuthOrg` no longer catch exceptions thrown by your own code further down the request
 
 - A 404 from any API call now throws. Calls on a user ID throw `InvalidUserException`, calls on an organisation ID throw `InvalidOrgException`, and calls that name both (`addUserToOrganisation()`, `removeUserFromOrganisation()`, `changeUserRole()`) throw a `PropelAuthException` with status 404. Previously writes such as `disableUser()`, `enableUser()` and `deleteUser()` returned `true` for a missing user. Write methods still return `true`; failures always throw
 - API failures throw `PropelAuthException` (or a subclass) instead of a bare `\Exception`: `ValidationException` for 400/422, the new `UnauthorizedException` for 401/403, `RateLimitException` for 429. Code catching `\Exception` still works
@@ -31,6 +33,7 @@ These come from an audit against PropelAuth's docs, Postman collection and offic
 
 ### Added
 
+- `validateToken()` takes `fresh: true` to skip the user cache
 - `verifyAccessToken()` on `Earhart` and `UserService`: local token verification returning an `AccessToken` (claims, memberships, impersonator), with no API call
 - `OrgMemberInfo` with `isRole()`, `isAtLeastRole()`, `hasPermission()`; `UserData`/`AccessToken` helpers `org()`, `isMemberOf()`, `roleIn()`, `isRoleIn()`, `isAtLeastRoleIn()`, `hasPermissionIn()`
 - `FeatureNotEnabledException` for 426 responses (organisation calls when B2B support is off)

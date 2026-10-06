@@ -70,9 +70,9 @@ class Earhart
      * @throws InvalidTokenException If the token is invalid or expired
      * @throws PropelAuthException On any other API failure
      */
-    public function validateToken(string $token): UserData
+    public function validateToken(string $token, bool $fresh = false): UserData
     {
-        return $this->userService->validateToken($token);
+        return $this->userService->validateToken($token, $fresh);
     }
 
     /**

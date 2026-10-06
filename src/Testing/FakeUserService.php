@@ -65,7 +65,7 @@ class FakeUserService extends UserService
         });
     }
 
-    public function validateToken(string $token): UserData
+    public function validateToken(string $token, bool $fresh = false): UserData
     {
         return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->state->userData($this->tokenUserId($token)));
     }
