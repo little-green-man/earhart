@@ -6,6 +6,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use LittleGreenMan\Earhart\Exceptions\FeatureNotEnabledException;
 use LittleGreenMan\Earhart\PropelAuth\StepUpGrantType;
+use LittleGreenMan\Earhart\Services\ApiKeyService;
 use LittleGreenMan\Earhart\Services\CacheService;
 use LittleGreenMan\Earhart\Services\MfaService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
@@ -34,6 +35,11 @@ function contractUsers(): UserService
 function contractOrgs(): OrganisationService
 {
     return new OrganisationService('key', 'https://auth.example.com', new CacheService(false));
+}
+
+function contractKeys(): ApiKeyService
+{
+    return new ApiKeyService('key', 'https://auth.example.com', new CacheService(false));
 }
 
 function contractMfa(): MfaService
@@ -255,6 +261,53 @@ describe('requests match the Node SDK', function () {
         'verify grant' => [
             fn () => contractMfa()->verifyGrant('u1', 'DELETE_ACCOUNT', 'g'),
             'POST', '/api/backend/v1/mfa/step-up/verify-grant', [], ['action_type' => 'DELETE_ACCOUNT', 'user_id' => 'u1', 'grant' => 'g'],
+        ],
+        'create API key' => [
+            fn () => contractKeys()->createApiKey('u1', 'o1', 1712880246, ['customKey' => 'v'], 'CI'),
+            'POST', '/api/backend/v1/end_user_api_keys', [],
+            ['user_id' => 'u1', 'org_id' => 'o1', 'expires_at_seconds' => 1712880246, 'metadata' => ['customKey' => 'v'], 'display_name' => 'CI'],
+            fixture('create_api_key'),
+        ],
+        'import API key' => [
+            fn () => contractKeys()->importApiKey('legacy-secret', userId: 'u1'),
+            'POST', '/api/backend/v1/end_user_api_keys/import', [], ['imported_api_key' => 'legacy-secret', 'user_id' => 'u1'], ['api_key_id' => 'k1'],
+        ],
+        'fetch API key' => [
+            fn () => contractKeys()->getApiKey('85b90f38'),
+            'GET', '/api/backend/v1/end_user_api_keys/85b90f38', [], null, fixture('fetch_api_key'),
+        ],
+        'active API keys' => [
+            fn () => contractKeys()->getActiveApiKeys('u1', 'o1', 'a@b.com', 10, 0),
+            'GET', '/api/backend/v1/end_user_api_keys', ['user_id' => 'u1', 'org_id' => 'o1', 'user_email' => 'a@b.com', 'page_size' => '10', 'page_number' => '0'], null,
+            fixture('active_api_keys'),
+        ],
+        'archived API keys' => [
+            fn () => contractKeys()->getArchivedApiKeys(orgId: 'o1'),
+            'GET', '/api/backend/v1/end_user_api_keys/archived', ['org_id' => 'o1', 'page_size' => '10', 'page_number' => '0'], null, fixture('active_api_keys'),
+        ],
+        'update API key' => [
+            fn () => contractKeys()->updateApiKey('k1', 1712848015, ['customKey' => 'v']),
+            'PATCH', '/api/backend/v1/end_user_api_keys/k1', [], ['expires_at_seconds' => 1712848015, 'metadata' => ['customKey' => 'v']],
+        ],
+        'update API key to never expire' => [
+            fn () => contractKeys()->updateApiKey('k1', neverExpire: true),
+            'PATCH', '/api/backend/v1/end_user_api_keys/k1', [], ['set_to_never_expire' => true],
+        ],
+        'delete API key' => [
+            fn () => contractKeys()->deleteApiKey('k1'),
+            'DELETE', '/api/backend/v1/end_user_api_keys/k1', [], null,
+        ],
+        'validate API key' => [
+            fn () => contractKeys()->validateApiKey('Bearer secret'),
+            'POST', '/api/backend/v1/end_user_api_keys/validate', [], ['api_key_token' => 'secret'], fixture('validate_api_key'),
+        ],
+        'validate imported API key' => [
+            fn () => contractKeys()->validateImportedApiKey('secret'),
+            'POST', '/api/backend/v1/end_user_api_keys/validate_imported', [], ['api_key_token' => 'secret'], fixture('validate_api_key'),
+        ],
+        'API key usage' => [
+            fn () => contractKeys()->getApiKeyUsage(new \DateTimeImmutable('2026-10-06'), 'k1', 'u1', 'o1'),
+            'GET', '/api/backend/v1/end_user_api_keys/usage', ['date' => '2026-10-06', 'api_key_id' => 'k1', 'user_id' => 'u1', 'org_id' => 'o1'], null, ['count' => 3],
         ],
         'fetch SAML SP metadata' => [
             fn () => contractOrgs()->fetchSAMLMetadata('o1'),

@@ -56,6 +56,12 @@ class FakeState
     /** @var array<string, array{userId: string, actionType: string, oneTimeUse: bool, expiresAt: int}> Keyed by grant */
     public array $grants = [];
 
+    /** @var array<string, array{token: string, userId: ?string, orgId: ?string, expiresAt: ?int, metadata: ?array<string, mixed>, displayName: ?string, createdAt: int, archived: bool, imported: bool}> End-user API keys keyed by ID */
+    public array $apiKeys = [];
+
+    /** @var array<string, array<string, int>> Validation counts keyed by Y-m-d date, then API key ID */
+    public array $apiKeyUsage = [];
+
     /** @var array<string, string> User IDs keyed by access token */
     public array $tokens = [];
 

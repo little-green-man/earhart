@@ -38,6 +38,11 @@ class PropelAuthException extends Exception
     public static function fromResponse(string $method, string $endpoint, Response $response): self
     {
         if ($response->status() === 429) {
+            // PropelAuth's per-key limit on an end-user API key, not a limit on your backend calls
+            if (is_array($response->json()) && isset($response->json()['wait_seconds'])) {
+                return ApiKeyRateLimitException::fromBody($response->json());
+            }
+
             return RateLimitException::fromHeaders($response->header('Retry-After') ?: null);
         }
 

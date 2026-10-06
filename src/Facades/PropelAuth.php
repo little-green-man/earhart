@@ -39,6 +39,7 @@ use LittleGreenMan\Earhart\Testing\EarhartFake;
  * @method static \LittleGreenMan\Earhart\Services\UserService users()
  * @method static \LittleGreenMan\Earhart\Services\OrganisationService organisations()
  * @method static \LittleGreenMan\Earhart\Services\MfaService mfa()
+ * @method static \LittleGreenMan\Earhart\Services\ApiKeyService apiKeys()
  * @method static \LittleGreenMan\Earhart\Services\CacheService cache()
  */
 class PropelAuth extends Facade

@@ -46,6 +46,7 @@ echo $user->emailConfirmed;  // true
   - [Organization Roles](#organization-roles)
   - [SAML Configuration](#saml-configuration)
 - [Step-Up MFA](#step-up-mfa)
+- [End-User API Keys](#end-user-api-keys)
 - [Pagination & Data Handling](#pagination--data-handling)
 - [Caching](#caching)
 - [Error Handling](#error-handling)
@@ -866,6 +867,74 @@ if (! $mfa->verifyGrant($userId, 'DELETE_ACCOUNT', $grant)) {
 
 Grants are one-time by default and valid for 300 seconds. Pass `grantType: StepUpGrantType::TimeBased` and `validForSeconds` to allow several actions within a window. If step-up MFA isn't on your PropelAuth plan, calls throw `FeatureNotEnabledException`.
 
+## End-User API Keys
+
+> **API Reference**: [API Key APIs](https://docs.propelauth.com/reference/api/apikey)
+
+API keys your users create to call your API. They belong to a user (personal), an organisation, or a user within an organisation. These are separate from the PropelAuth API key Earhart uses.
+
+### Protecting Routes
+
+```php
+use LittleGreenMan\Earhart\Middleware\VerifyPropelAuthApiKey;
+use LittleGreenMan\Earhart\Middleware\VerifyPropelAuthPermission;
+
+Route::middleware(VerifyPropelAuthApiKey::class)->get('/api/reports', ...);              // Any key
+Route::middleware(VerifyPropelAuthApiKey::class.':personal')->get('/api/me', ...);       // Personal keys only
+Route::middleware([
+    VerifyPropelAuthApiKey::class.':org',
+    VerifyPropelAuthPermission::class.':Admin',                                         // The key's user must be an Admin
+])->post('/api/settings', ...);
+```
+
+The middleware reads `Authorization: Bearer <key>`, and sets `propelauth_api_key`, `propelauth_user` and `propelauth_org_id` on the request. An invalid key gets 401. A key over the rate limit you set for it in PropelAuth gets 429 with a `Retry-After` header.
+
+### Validating Keys Yourself
+
+```php
+use LittleGreenMan\Earhart\Exceptions\ApiKeyRateLimitException;
+use LittleGreenMan\Earhart\Exceptions\InvalidApiKeyException;
+
+try {
+    $key = app('earhart')->apiKeys()->validateApiKey($request->bearerToken());
+
+    $key->isPersonal();   // or isOrg()
+    $key->user;           // UserData, with memberships
+    $key->org;            // OrganisationData, for org keys
+    $key->userInOrg;      // OrgMemberInfo: the user's role in that org
+    $key->metadata;       // What you stored with the key
+} catch (InvalidApiKeyException $e) {
+    abort(401);
+} catch (ApiKeyRateLimitException $e) {
+    abort(429, $e->userFacingError ?? 'Too many requests');
+}
+```
+
+`validatePersonalApiKey()` and `validateOrgApiKey()` also check the kind of key. A key-specific rate limit is never retried, unlike Earhart's own `RateLimitException`.
+
+### Managing Keys
+
+```php
+$keys = app('earhart')->apiKeys();
+
+// Create: show $new->apiKeyToken to the owner once; it can't be fetched again
+$new = $keys->createApiKey(userId: $userId, orgId: $orgId, expiresAt: now()->addYear(), metadata: ['scope' => 'read'], displayName: 'CI');
+
+$key = $keys->getApiKey($new->apiKeyId);                       // ApiKey: owner, expiry, metadata
+$active = $keys->getActiveApiKeys(userId: $userId);              // Paginated ApiKey items; also orgId, userEmail
+$archived = $keys->getArchivedApiKeys(orgId: $orgId);            // Expired and deleted keys
+
+$keys->updateApiKey($new->apiKeyId, metadata: ['scope' => 'write']);
+$keys->updateApiKey($new->apiKeyId, neverExpire: true);
+$keys->deleteApiKey($new->apiKeyId);
+
+$count = $keys->getApiKeyUsage(today(), apiKeyId: $new->apiKeyId); // Validations that day
+
+// Bring over keys from another system so they keep working
+$apiKeyId = $keys->importApiKey($legacySecret, userId: $userId);
+$keys->validateImportedApiKey($legacySecret);
+```
+
 ## Pagination & Data Handling
 
 ### Working with Paginated Results
@@ -978,6 +1047,9 @@ Every API failure throws a `PropelAuthException` or one of its subclasses. Each 
 | `RateLimitException` | 429 after retries are used up. `$retryAfterSeconds` holds the wait |
 | `InvalidTokenException` | An access token is malformed, expired, or from another environment |
 | `FeatureNotEnabledException` | 426: the feature isn't enabled for the project (organisation calls need B2B support) |
+| `StepUpMfaException` | A step-up MFA code was wrong, or the user has no MFA of that kind |
+| `InvalidApiKeyException` | An end-user API key is invalid, expired, deleted or the wrong kind |
+| `ApiKeyRateLimitException` | An end-user API key hit the rate limit set for it in PropelAuth (not retried) |
 | `PropelAuthException` | Anything else, including a 404 on calls naming both a user and an organisation |
 
 Write methods return `true` on success and throw on failure, so a missing user or organisation never passes silently.
@@ -1100,6 +1172,7 @@ $groupId = $fake->addScimGroup($org->orgId, 'Engineering', [$user->userId]);
 $fake->withMfa($user->userId);                      // Authenticator app
 $fake->withMfa($user->userId, ['phone_id' => '1234']); // SMS, numbers keyed by MFA phone ID
 $fake->withValidMfaCode('654321');                  // Defaults to 123456
+$key = $fake->addApiKey(userId: $user->userId);     // Use $key->apiKeyToken in requests
 ```
 
 Seeding is not recorded as a call.
@@ -1136,6 +1209,8 @@ $fake->assertOrganisationDeleted($orgId);
 $fake->assertUserAddedToOrganisation($orgId, $userId, 'Admin');
 $fake->assertUserRemovedFromOrganisation($orgId, $userId);
 $fake->assertUserInvitedToOrganisation($orgId, 'new@example.com');
+$fake->assertApiKeyCreated(userId: $userId);
+$fake->assertApiKeyDeleted($apiKeyId);
 
 // Any method, with its named arguments
 $fake->assertCalled('createAccessToken', fn (array $args) => $args['durationInMinutes'] === 5);
@@ -1296,7 +1371,6 @@ protected function schedule(Schedule $schedule)
 
 These PropelAuth APIs aren't implemented in Earhart yet:
 
-- **End-user API keys** ([reference](https://docs.propelauth.com/reference/api/apikey)): creating, validating, listing, importing and tracking usage of API keys your users create. These are separate from the PropelAuth API key Earhart itself uses.
 - **User and org insights** ([reference](https://docs.propelauth.com/reference/api/insights)): the user and org reports and chart metrics.
 - **Social login redirects and account linking**: these are browser flows; use the Socialite provider for login.
 

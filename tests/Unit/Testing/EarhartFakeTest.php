@@ -5,6 +5,7 @@ namespace LittleGreenMan\Earhart\Tests\Unit\Testing;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use LittleGreenMan\Earhart\Earhart;
+use LittleGreenMan\Earhart\Exceptions\InvalidApiKeyException;
 use LittleGreenMan\Earhart\Exceptions\InvalidOrgException;
 use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
 use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
@@ -13,6 +14,7 @@ use LittleGreenMan\Earhart\Exceptions\StepUpMfaException;
 use LittleGreenMan\Earhart\Exceptions\UnauthorizedException;
 use LittleGreenMan\Earhart\Exceptions\ValidationException;
 use LittleGreenMan\Earhart\Facades\PropelAuth;
+use LittleGreenMan\Earhart\Middleware\VerifyPropelAuthApiKey;
 use LittleGreenMan\Earhart\Middleware\VerifyPropelAuthUser;
 use LittleGreenMan\Earhart\Services\MfaService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
@@ -319,5 +321,62 @@ describe('3.1 endpoints', function () {
         expect(PropelAuth::mfa()->getUserMfaMethods($smsUser->userId)->phoneNumbers)->toBe(['p1' => '1234'])
             ->and(PropelAuth::mfa()->verifyGrant($smsUser->userId, 'EXPORT', $smsGrant))->toBeTrue()
             ->and(app(MfaService::class))->toBe($fake->mfa());
+    });
+});
+
+describe('API keys', function () {
+    test('create, validate, list, update, delete and usage', function () {
+        $fake = Earhart::fake();
+        $user = $fake->addUser();
+        $org = $fake->addOrganisation(members: [$user->userId => 'Admin']);
+
+        $personal = PropelAuth::apiKeys()->createApiKey(userId: $user->userId, displayName: 'CLI');
+        $orgKey = $fake->addApiKey(userId: $user->userId, orgId: $org->orgId);
+
+        $validation = PropelAuth::apiKeys()->validateApiKey('Bearer '.$personal->apiKeyToken);
+        $orgValidation = PropelAuth::apiKeys()->validateOrgApiKey($orgKey->apiKeyToken);
+
+        expect($validation->isPersonal())->toBeTrue()
+            ->and($validation->user->userId)->toBe($user->userId)
+            ->and($orgValidation->org->orgId)->toBe($org->orgId)
+            ->and($orgValidation->userInOrg->userRole)->toBe('Admin')
+            ->and(fn () => PropelAuth::apiKeys()->validatePersonalApiKey($orgKey->apiKeyToken))->toThrow(InvalidApiKeyException::class)
+            ->and(PropelAuth::apiKeys()->getActiveApiKeys(userId: $user->userId)->totalItems)->toBe(2)
+            ->and(PropelAuth::apiKeys()->getApiKeyUsage(now(), $personal->apiKeyId))->toBe(1);
+
+        PropelAuth::apiKeys()->updateApiKey($personal->apiKeyId, metadata: ['scope' => 'read']);
+        PropelAuth::apiKeys()->deleteApiKey($personal->apiKeyId);
+
+        expect(PropelAuth::apiKeys()->getApiKey($personal->apiKeyId)->metadata)->toBe(['scope' => 'read'])
+            ->and(fn () => PropelAuth::apiKeys()->validateApiKey($personal->apiKeyToken))->toThrow(InvalidApiKeyException::class)
+            ->and(PropelAuth::apiKeys()->getArchivedApiKeys(userId: $user->userId)->items[0]->apiKeyId)->toBe($personal->apiKeyId);
+
+        $fake->assertApiKeyCreated(userId: $user->userId)->assertApiKeyDeleted($personal->apiKeyId);
+    });
+
+    test('expired and imported keys', function () {
+        $fake = Earhart::fake();
+        $user = $fake->addUser();
+        $expired = $fake->addApiKey(userId: $user->userId, expiresAt: now()->subMinute());
+
+        PropelAuth::apiKeys()->importApiKey('legacy-secret', userId: $user->userId);
+
+        expect(fn () => PropelAuth::apiKeys()->validateApiKey($expired->apiKeyToken))->toThrow(InvalidApiKeyException::class)
+            ->and(PropelAuth::apiKeys()->validateImportedApiKey('legacy-secret')->user->userId)->toBe($user->userId)
+            ->and(fn () => PropelAuth::apiKeys()->validateApiKey('legacy-secret'))->toThrow(InvalidApiKeyException::class);
+    });
+
+    test('the middleware works with the fake', function () {
+        $fake = Earhart::fake();
+        $user = $fake->addUser();
+        $key = $fake->addApiKey(userId: $user->userId);
+
+        $request = Request::create('/');
+        $request->headers->set('Authorization', "Bearer {$key->apiKeyToken}");
+
+        $response = app(VerifyPropelAuthApiKey::class)->handle($request, fn () => response('OK'), 'personal');
+
+        expect($response->getStatusCode())->toBe(200)
+            ->and($request->attributes->get('propelauth_user')->userId)->toBe($user->userId);
     });
 });

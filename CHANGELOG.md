@@ -14,7 +14,10 @@ All notable changes to `earhart` will be documented in this file.
 - `setOIDCIdPMetadata()` for SSO through Okta, Microsoft Entra or a generic OIDC provider
 - SCIM groups: `getScimGroups()` (paginated, optionally for one user) and `getScimGroup()` with members, returning `ScimGroup`
 - Step-up MFA: new `MfaService` (`Earhart::mfa()`) with `getUserMfaMethods()`, `verifyTotp()`, `sendSmsCode()`, `verifySmsCode()` and `verifyGrant()`; `StepUpGrantType`; `StepUpMfaException` for PropelAuth's MFA error codes
-- `EarhartFake` covers all of the above, with `addOAuthToken()`, `addEmployee()`, `addScimGroup()`, `withMfa()` and `withValidMfaCode()`
+- End-user API keys: new `ApiKeyService` (`Earhart::apiKeys()`) covering create, import, fetch, list active and archived, update, delete, validate (any, personal, org, imported) and usage; `ApiKey`, `NewApiKey` and `ApiKeyValidation`; `InvalidApiKeyException`; `ApiKeyRateLimitException` for a key's own rate limit, which is never retried
+- `VerifyPropelAuthApiKey` middleware, optionally requiring a personal or org key, which sets the request's user and org for `VerifyPropelAuthPermission`
+- `PATCH` support in `BaseApiService`
+- `EarhartFake` covers all of the above, with `addOAuthToken()`, `addEmployee()`, `addScimGroup()`, `withMfa()`, `withValidMfaCode()` and `addApiKey()`, plus `assertApiKeyCreated()` and `assertApiKeyDeleted()`
 
 ## [3.0.0] - 2026-10-06
 

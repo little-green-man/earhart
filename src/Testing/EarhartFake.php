@@ -6,8 +6,10 @@ use Illuminate\Support\Str;
 use LittleGreenMan\Earhart\Earhart;
 use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\Facades\PropelAuth;
+use LittleGreenMan\Earhart\PropelAuth\NewApiKey;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationData;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
+use LittleGreenMan\Earhart\Services\ApiKeyService;
 use LittleGreenMan\Earhart\Services\MfaService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 use LittleGreenMan\Earhart\Services\UserService;
@@ -39,6 +41,7 @@ class EarhartFake extends Earhart
         $this->userService = new FakeUserService($this->state);
         $this->organisationService = new FakeOrganisationService($this->state);
         $this->mfaService = new FakeMfaService($this->state);
+        $this->apiKeyService = new FakeApiKeyService($this->state);
     }
 
     // ============================================================
@@ -187,6 +190,24 @@ class EarhartFake extends Earhart
         return $this;
     }
 
+    /**
+     * Add an end-user API key. Use the returned token in requests your test sends.
+     *
+     * @param  array<string, mixed>|null  $metadata
+     */
+    public function addApiKey(
+        ?string $userId = null,
+        ?string $orgId = null,
+        \DateTimeInterface|int|null $expiresAt = null,
+        ?array $metadata = null,
+        ?string $displayName = null,
+    ): NewApiKey {
+        /** @var FakeApiKeyService $service */
+        $service = $this->apiKeyService;
+
+        return $service->store($userId, $orgId, $expiresAt, $metadata, $displayName);
+    }
+
     // ============================================================
     // Failures
     // ============================================================
@@ -194,7 +215,7 @@ class EarhartFake extends Earhart
     /**
      * Make the next call(s) fail.
      *
-     * @param  string  $target  A service class (UserService::class, OrganisationService::class, MfaService::class) or a method name
+     * @param  string  $target  A service class (UserService::class, OrganisationService::class, MfaService::class, ApiKeyService::class) or a method name
      * @param  int|PropelAuthException  $failure  An HTTP status, mapped to the matching exception, or the exception to throw
      */
     public function failNext(string $target, int|PropelAuthException $failure = 500, int $times = 1): static
@@ -344,6 +365,17 @@ class EarhartFake extends Earhart
         return $this->assertCalled('removeUserFromOrganisation', fn ($args) => $args['orgId'] === $orgId && $args['userId'] === $userId);
     }
 
+    public function assertApiKeyCreated(?string $userId = null, ?string $orgId = null): static
+    {
+        return $this->assertCalled('createApiKey', fn ($args) => ($userId === null || $args['userId'] === $userId)
+            && ($orgId === null || $args['orgId'] === $orgId));
+    }
+
+    public function assertApiKeyDeleted(string $apiKeyId): static
+    {
+        return $this->assertCalled('deleteApiKey', fn ($args) => $args['apiKeyId'] === $apiKeyId);
+    }
+
     public function assertUserInvitedToOrganisation(string $orgId, string $email): static
     {
         return $this->assertCalled('inviteUserToOrganisation', fn ($args) => $args['orgId'] === $orgId && strcasecmp($args['email'], $email) === 0);
@@ -372,6 +404,7 @@ class EarhartFake extends Earhart
         app()->instance(UserService::class, $this->userService);
         app()->instance(OrganisationService::class, $this->organisationService);
         app()->instance(MfaService::class, $this->mfaService);
+        app()->instance(ApiKeyService::class, $this->apiKeyService);
 
         PropelAuth::clearResolvedInstance('earhart');
 

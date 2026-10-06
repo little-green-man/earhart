@@ -184,6 +184,7 @@ abstract class BaseApiService
             'POST' => $request->post($this->authUrl.$endpoint, $data),
             'PUT' => $request->put($this->authUrl.$endpoint, $data),
             'DELETE' => $request->delete($this->authUrl.$endpoint, $data),
+            'PATCH' => $request->patch($this->authUrl.$endpoint, $data),
             default => throw new \InvalidArgumentException("Unsupported method: {$method}"),
         };
 
