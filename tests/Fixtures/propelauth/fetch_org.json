@@ -1,0 +1,13 @@
+{
+    "org_id": "582e7c11-6b72-40d8-886d-461e6491fa71",
+    "name": "Acme Inc",
+    "url_safe_org_slug": "51c08c1b-8526-40cd-8679-ddb15cea2984",
+    "can_setup_saml": false,
+    "is_saml_configured": false,
+    "is_saml_in_test_mode": false,
+    "domain": "acme.com",
+    "domain_autojoin": true,
+    "domain_restrict": true,
+    "max_users": 100,
+    "custom_role_mapping_name": "Business Plan"
+}

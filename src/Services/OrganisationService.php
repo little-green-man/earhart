@@ -6,6 +6,7 @@ use LittleGreenMan\Earhart\Exceptions\InvalidOrgException;
 use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationData;
 use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
+use LittleGreenMan\Earhart\PropelAuth\SamlSpMetadata;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
 
 class OrganisationService extends BaseApiService
@@ -28,18 +29,26 @@ class OrganisationService extends BaseApiService
     /**
      * Query organisations with pagination.
      *
+     * @param  ?string  $orderBy  CREATED_AT_ASC, CREATED_AT_DESC or NAME
+     *
      * @throws PropelAuthException On any API failure
      */
     public function queryOrganisations(
         ?string $orderBy = null,
         int $pageNumber = 0,
         int $pageSize = 100,
+        ?string $name = null,
+        ?string $legacyOrgId = null,
+        ?string $domain = null,
     ): PaginatedResult {
         $params = array_filter(
             [
                 'orderBy' => $orderBy,
                 'pageNumber' => $pageNumber,
                 'pageSize' => $pageSize,
+                'name' => $name,
+                'legacyOrgId' => $legacyOrgId,
+                'domain' => $domain,
             ],
             fn ($v) => $v !== null,
         );
@@ -58,22 +67,33 @@ class OrganisationService extends BaseApiService
             $orderBy,
             $nextPage,
             $pageSize,
+            $name,
+            $legacyOrgId,
+            $domain,
         ));
     }
 
     /**
-     * Fetch users in organisation.
+     * Fetch users in organisation. Each user's `roleInOrg` holds their role in this organisation.
+     *
+     * @param  ?string  $role  Only return users with this role
      *
      * @throws InvalidOrgException If the organisation does not exist
      * @throws PropelAuthException On any other API failure
      */
-    public function getOrganisationUsers(string $orgId, int $pageSize = 100, int $pageNumber = 0): PaginatedResult
-    {
-        $response = $this->makeRequest('GET', "/api/backend/v1/user/org/{$orgId}", [
+    public function getOrganisationUsers(
+        string $orgId,
+        int $pageSize = 100,
+        int $pageNumber = 0,
+        ?string $role = null,
+        bool $includeOrgs = false,
+    ): PaginatedResult {
+        $response = $this->makeRequest('GET', "/api/backend/v1/user/org/{$orgId}", array_filter([
             'pageSize' => $pageSize,
             'pageNumber' => $pageNumber,
-            'includeOrgs' => false,
-        ], fn () => InvalidOrgException::notFound($orgId));
+            'role' => $role,
+            'includeOrgs' => $includeOrgs,
+        ], fn ($v) => $v !== null), fn () => InvalidOrgException::notFound($orgId));
 
         // Convert arrays to UserData objects for consistency
         $users = array_map(
@@ -82,21 +102,35 @@ class OrganisationService extends BaseApiService
         );
         $response['items'] = $users;
 
-        return PaginatedResult::from($response, fn (int $nextPage) => $this->getOrganisationUsers($orgId, $pageSize, $nextPage));
+        return PaginatedResult::from($response, fn (int $nextPage) => $this->getOrganisationUsers($orgId, $pageSize, $nextPage, $role, $includeOrgs));
     }
 
     /**
-     * Create a new organisation.
+     * Create a new organisation. To set metadata, follow up with updateOrganisation().
+     *
+     * @param  ?bool  $enableAutoJoiningByDomain  Let users with a matching email domain join without an invite
+     * @param  ?bool  $membersMustHaveMatchingDomain  Only allow members whose email domain matches
      *
      * @throws PropelAuthException On any API failure
      */
-    public function createOrganisation(string $name, ?string $slug = null, ?array $metadata = null): string
-    {
+    public function createOrganisation(
+        string $name,
+        ?string $domain = null,
+        ?bool $enableAutoJoiningByDomain = null,
+        ?bool $membersMustHaveMatchingDomain = null,
+        ?int $maxUsers = null,
+        ?string $legacyOrgId = null,
+        ?string $customRoleMappingName = null,
+    ): string {
         $payload = array_filter(
             [
                 'name' => $name,
-                'urlSafeOrgSlug' => $slug,
-                'metadata' => $metadata,
+                'domain' => $domain,
+                'enableAutoJoiningByDomain' => $enableAutoJoiningByDomain,
+                'membersMustHaveMatchingDomain' => $membersMustHaveMatchingDomain,
+                'maxUsers' => $maxUsers,
+                'legacyOrgId' => $legacyOrgId,
+                'customRoleMappingName' => $customRoleMappingName,
             ],
             fn ($v) => $v !== null,
         );
@@ -107,17 +141,56 @@ class OrganisationService extends BaseApiService
     }
 
     /**
-     * Update organisation.
+     * Update organisation. Only the arguments you pass are changed.
+     *
+     * @param  ?bool  $autojoinByDomain  Let users with a matching email domain join without an invite
+     * @param  ?bool  $restrictToDomain  Only allow members whose email domain matches
+     * @param  ?string  $ssoTrustLevel  e.g. NeverTrust
+     * @param  \DateTimeInterface|string|null  $require2faBy  A date, or a string like "2026-01-20 12:34:56 UTC"
      *
      * @throws InvalidOrgException If the organisation does not exist
      * @throws PropelAuthException On any other API failure
      */
-    public function updateOrganisation(string $orgId, ?string $name = null, ?array $metadata = null): bool
-    {
+    public function updateOrganisation(
+        string $orgId,
+        ?string $name = null,
+        ?array $metadata = null,
+        ?string $domain = null,
+        ?array $extraDomains = null,
+        ?bool $autojoinByDomain = null,
+        ?bool $restrictToDomain = null,
+        ?int $maxUsers = null,
+        ?bool $canSetupSaml = null,
+        ?string $legacyOrgId = null,
+        ?string $ssoTrustLevel = null,
+        \DateTimeInterface|string|null $require2faBy = null,
+        ?bool $passwordRotationEnabled = null,
+        ?int $passwordRotationHistorySize = null,
+        ?int $passwordRotationPeriod = null,
+    ): bool {
+        if ($require2faBy instanceof \DateTimeInterface) {
+            $require2faBy = \DateTimeImmutable::createFromInterface($require2faBy)
+                ->setTimezone(new \DateTimeZone('UTC'))
+                ->format('Y-m-d H:i:s').' UTC';
+        }
+
         $payload = array_filter(
             [
                 'name' => $name,
                 'metadata' => $metadata,
+                'domain' => $domain,
+                'extraDomains' => $extraDomains,
+                'autojoinByDomain' => $autojoinByDomain,
+                'restrictToDomain' => $restrictToDomain,
+                'maxUsers' => $maxUsers,
+                'canSetupSaml' => $canSetupSaml,
+                'legacyOrgId' => $legacyOrgId,
+                'ssoTrustLevel' => $ssoTrustLevel,
+                // Snake case given directly: the converter would produce require2fa_by
+                'require_2fa_by' => $require2faBy,
+                'passwordRotationEnabled' => $passwordRotationEnabled,
+                'passwordRotationHistorySize' => $passwordRotationHistorySize,
+                'passwordRotationPeriod' => $passwordRotationPeriod,
             ],
             fn ($v) => $v !== null,
         );
@@ -148,15 +221,16 @@ class OrganisationService extends BaseApiService
      *
      * @throws PropelAuthException On any API failure
      */
-    public function addUserToOrganisation(string $orgId, string $userId, ?string $role = null): bool
+    public function addUserToOrganisation(string $orgId, string $userId, string $role, array $additionalRoles = []): bool
     {
         $payload = array_filter(
             [
                 'orgId' => $orgId,
                 'userId' => $userId,
                 'role' => $role,
+                'additionalRoles' => $additionalRoles,
             ],
-            fn ($v) => $v !== null,
+            fn ($v) => $v !== [],
         );
 
         $this->makeRequest('POST', '/api/backend/v1/org/add_user', $payload);
@@ -170,15 +244,16 @@ class OrganisationService extends BaseApiService
      *
      * @throws PropelAuthException On any API failure
      */
-    public function inviteUserToOrganisation(string $orgId, string $email, ?string $role = null): bool
+    public function inviteUserToOrganisation(string $orgId, string $email, string $role, array $additionalRoles = []): bool
     {
         $payload = array_filter(
             [
                 'orgId' => $orgId,
                 'email' => $email,
                 'role' => $role,
+                'additionalRoles' => $additionalRoles,
             ],
-            fn ($v) => $v !== null,
+            fn ($v) => $v !== [],
         );
 
         $this->makeRequest('POST', '/api/backend/v1/invite_user', $payload);
@@ -207,20 +282,23 @@ class OrganisationService extends BaseApiService
      *
      * @throws PropelAuthException On any API failure
      */
-    public function changeUserRole(string $orgId, string $userId, string $role): bool
+    public function changeUserRole(string $orgId, string $userId, string $role, array $additionalRoles = []): bool
     {
-        $this->makeRequest('POST', '/api/backend/v1/org/change_role', [
+        $this->makeRequest('POST', '/api/backend/v1/org/change_role', array_filter([
             'orgId' => $orgId,
             'userId' => $userId,
             'role' => $role,
-        ]);
+            'additionalRoles' => $additionalRoles,
+        ], fn ($v) => $v !== []));
         $this->cache->invalidateOrganisation($orgId);
 
         return true;
     }
 
     /**
-     * Get role mappings.
+     * Get role mappings (called role configurations in the dashboard).
+     *
+     * @return list<array{customRoleMappingName: string, numOrgsSubscribed: int}>
      *
      * @throws PropelAuthException On any API failure
      */
@@ -228,7 +306,7 @@ class OrganisationService extends BaseApiService
     {
         $response = $this->makeRequest('GET', '/api/backend/v1/custom_role_mappings');
 
-        return $response['roleMappings'] ?? [];
+        return $response['customRoleMappings'] ?? [];
     }
 
     /**
@@ -237,10 +315,10 @@ class OrganisationService extends BaseApiService
      * @throws InvalidOrgException If the organisation does not exist
      * @throws PropelAuthException On any other API failure
      */
-    public function subscribeOrgToRoleMapping(string $orgId, string $mappingId): bool
+    public function subscribeOrgToRoleMapping(string $orgId, string $mappingName): bool
     {
         $this->makeRequest('PUT', "/api/backend/v1/org/{$orgId}", [
-            'customRoleMappingId' => $mappingId,
+            'customRoleMappingName' => $mappingName,
         ], fn () => InvalidOrgException::notFound($orgId));
         $this->cache->invalidateOrganisation($orgId);
 
@@ -248,22 +326,25 @@ class OrganisationService extends BaseApiService
     }
 
     /**
-     * Get pending invites.
+     * Get pending invites, for one organisation or all.
+     *
+     * Each item has inviteeEmail, orgId, orgName, roleInOrg, additionalRolesInOrg,
+     * createdAt, expiresAt, inviterEmail and inviterUserId.
      *
      * @throws PropelAuthException On any API failure
      */
-    public function getPendingInvites(?string $orgId = null): PaginatedResult
+    public function getPendingInvites(?string $orgId = null, int $pageSize = 10, int $pageNumber = 0): PaginatedResult
     {
-        $params = $orgId ? ['orgId' => $orgId] : [];
-        $response = $this->makeRequest('GET', '/api/backend/v1/pending_org_invites', $params);
+        $response = $this->makeRequest('GET', '/api/backend/v1/pending_org_invites', array_filter([
+            'orgId' => $orgId,
+            'pageSize' => $pageSize,
+            'pageNumber' => $pageNumber,
+        ], fn ($v) => $v !== null));
 
-        // Transform invites to items for PaginatedResult
-        if (isset($response['invites'])) {
-            $response['items'] = $response['invites'];
-            unset($response['invites']);
-        }
-
-        return PaginatedResult::from($response, fn (int $nextPage) => $this->getPendingInvites($orgId));
+        return PaginatedResult::from(
+            $response,
+            fn (int $nextPage) => $this->getPendingInvites($orgId, $pageSize, $nextPage),
+        );
     }
 
     /**
@@ -315,37 +396,52 @@ class OrganisationService extends BaseApiService
      * @throws InvalidOrgException If the organisation does not exist
      * @throws PropelAuthException On any other API failure
      */
-    public function createSAMLConnectionLink(string $orgId): string
+    public function createSAMLConnectionLink(string $orgId, ?int $expiresInSeconds = null): string
     {
-        $response = $this->makeRequest('POST', "/api/backend/v1/org/{$orgId}/create_saml_connection_link", notFound: fn () => InvalidOrgException::notFound($orgId));
+        $response = $this->makeRequest(
+            'POST',
+            "/api/backend/v1/org/{$orgId}/create_saml_connection_link",
+            array_filter(['expiresInSeconds' => $expiresInSeconds], fn ($v) => $v !== null),
+            fn () => InvalidOrgException::notFound($orgId),
+        );
 
         return $response['url'] ?? '';
     }
 
     /**
-     * Fetch SAML SP metadata.
+     * Fetch the SAML service-provider details (entity ID, ACS URL, logout URL) to give the organisation's IdP.
      *
      * @throws InvalidOrgException If the organisation does not exist
      * @throws PropelAuthException On any other API failure
      */
-    public function fetchSAMLMetadata(string $orgId): string
+    public function fetchSAMLMetadata(string $orgId): SamlSpMetadata
     {
         $response = $this->makeRequest('GET', "/api/backend/v1/saml_sp_metadata/{$orgId}", notFound: fn () => InvalidOrgException::notFound($orgId));
 
-        return $response['metadata'] ?? '';
+        return SamlSpMetadata::fromArray($response);
     }
 
     /**
-     * Set SAML IdP metadata.
+     * Set the organisation's SAML identity provider details.
+     *
+     * @param  string  $provider  The IdP, e.g. Okta, Azure, Google, Rippling, OneLogin, JumpCloud, Duo or Generic
      *
      * @throws InvalidOrgException If the organisation does not exist
      * @throws PropelAuthException On any other API failure
      */
-    public function setSAMLIdPMetadata(string $orgId, string $metadataXml): bool
-    {
+    public function setSAMLIdPMetadata(
+        string $orgId,
+        string $idpEntityId,
+        string $idpSsoUrl,
+        string $idpCertificate,
+        string $provider,
+    ): bool {
         $this->makeRequest('POST', '/api/backend/v1/saml_idp_metadata', [
             'orgId' => $orgId,
-            'idpMetadata' => $metadataXml,
+            'idpEntityId' => $idpEntityId,
+            'idpSsoUrl' => $idpSsoUrl,
+            'idpCertificate' => $idpCertificate,
+            'provider' => $provider,
         ], fn () => InvalidOrgException::notFound($orgId));
         $this->cache->invalidateOrganisation($orgId);
 
@@ -382,6 +478,8 @@ class OrganisationService extends BaseApiService
 
     /**
      * Migrate organisation to isolated.
+     *
+     * Documented by PropelAuth but not used by their official SDKs, so less proven than other calls.
      *
      * @throws InvalidOrgException If the organisation does not exist
      * @throws PropelAuthException On any other API failure

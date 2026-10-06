@@ -23,6 +23,7 @@
         "illuminate/support": "^12.0|^13.0",
         "socialiteproviders/propelauth": "^4.0",
         "svix/svix": "^1.81",
+        "firebase/php-jwt": "^6.4|^7.0",
         "spatie/laravel-data": "^4.18"
     },
     "require-dev": {

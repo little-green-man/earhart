@@ -1,6 +1,8 @@
 # Upgrading to v3.0
 
-This guide covers upgrading from Earhart v2.x to v3.0. Most apps need no code changes unless they rely on a missing user or organisation "succeeding", or parse exception messages.
+This guide covers upgrading from Earhart v2.x to v3.0. Most apps need no code changes unless they rely on a missing user or organisation "succeeding", parse exception messages, or use the organisation, SAML or membership APIs fixed in section 6.
+
+Several v2 methods called PropelAuth with the wrong endpoint or fields, so they never worked against the real API (details in [docs/PROPELAUTH_API_AUDIT.md](docs/PROPELAUTH_API_AUDIT.md)). Their signatures change in v3 to match PropelAuth.
 
 ## Breaking changes checklist
 
@@ -9,6 +11,10 @@ This guide covers upgrading from Earhart v2.x to v3.0. Most apps need no code ch
 - [ ] Check your rate-limit retry expectations
 - [ ] Check PropelAuth errors now reaching your error tracker
 - [ ] Update any subclass of `UserService`, `OrganisationService` or `BaseApiService`
+- [ ] Update membership code to use `OrgMemberInfo` (`$user->orgs`)
+- [ ] Update calls to `createOrganisation()`, `setSAMLIdPMetadata()`, `fetchSAMLMetadata()`, `subscribeOrgToRoleMapping()`, `addUserToOrganisation()` and `inviteUserToOrganisation()`
+- [ ] Rename `OrganisationData::$maxOrgMembers` to `$maxUsers`
+- [ ] Check the API key can read token verification metadata, or set `PROPELAUTH_VERIFIER_KEY`
 
 ## 1. Write calls throw on a 404
 
@@ -134,6 +140,12 @@ If you published `config/earhart.php`, add the new keys (or re-publish it with `
     'base_delay_ms' => env('PROPELAUTH_RETRY_BASE_DELAY_MS', 2000),
     'max_delay_ms' => env('PROPELAUTH_RETRY_MAX_DELAY_MS', 5000),
 ],
+
+'token_verification' => [
+    'verifier_key' => env('PROPELAUTH_VERIFIER_KEY'),
+    'issuer' => env('PROPELAUTH_ISSUER'),
+    'cache_minutes' => env('PROPELAUTH_VERIFIER_KEY_CACHE_MINUTES', 1440),
+],
 ```
 
 The defaults apply even if you don't.
@@ -157,6 +169,80 @@ The defaults apply even if you don't.
 
 - `sendRequest()` throws on every failed response, including a 404.
 - The `$maxRetries` and `$initialRetryDelay` properties are removed; use the `earhart.retries` config.
+
+## 6. Fixes that change behaviour or signatures
+
+### Access token validation
+
+**Likelihood of impact: high if you use `VerifyPropelAuthUser` or `validateToken()`**
+
+v2's `validateToken()` called `/api/backend/v1/user/me`, which PropelAuth doesn't provide, so it never accepted a token. v3 verifies the token locally (RS256 signature, expiry, issuer), then fetches the user. The signature is unchanged, but:
+
+- an invalid or expired token throws `InvalidTokenException` (v2 threw `InvalidUserException`); `VerifyPropelAuthUser` still returns 401
+- the first verification fetches your environment's public key from `/api/v1/token_verification_metadata` with your API key, then caches it for a day. If your key can't make that request, set `PROPELAUTH_VERIFIER_KEY` to the public key from the **Backend Integration** page (`\n` escapes are accepted)
+- `verifyAccessToken()` is new: it returns the token's claims without fetching the user
+
+### Memberships
+
+**Likelihood of impact: medium**
+
+`$user->orgs` was always empty in v2. It is now an array of `OrgMemberInfo` keyed by org ID, and `getUser()` includes memberships by default.
+
+```php
+// OLD (never populated)
+foreach ($user->orgs as $org) {
+    $org['orgId'];
+}
+
+// NEW
+foreach ($user->orgs as $orgId => $org) {
+    $org->orgName;
+    $org->userRole;
+}
+
+$user->isAtLeastRoleIn($orgId, 'Admin');
+$user->hasPermissionIn($orgId, 'propelauth::can_invite');
+```
+
+`VerifyPropelAuthPermission` now follows your PropelAuth role hierarchy using the inherited roles PropelAuth returns, so custom hierarchies work. Role names match case-insensitively, as before.
+
+### Organisation and SAML methods
+
+**Likelihood of impact: low (these calls didn't work in v2)**
+
+```php
+// createOrganisation(): slug and metadata aren't accepted by PropelAuth on create
+// OLD
+$orgs->createOrganisation('Acme', slug: 'acme', metadata: ['plan' => 'pro']);
+// NEW
+$orgId = $orgs->createOrganisation('Acme', domain: 'acme.com', maxUsers: 50);
+$orgs->updateOrganisation($orgId, metadata: ['plan' => 'pro']);
+
+// setSAMLIdPMetadata(): PropelAuth takes the IdP's details, not an XML document
+// OLD
+$orgs->setSAMLIdPMetadata($orgId, $xml);
+// NEW
+$orgs->setSAMLIdPMetadata($orgId, idpEntityId: $entityId, idpSsoUrl: $ssoUrl, idpCertificate: $pem, provider: 'Okta');
+
+// fetchSAMLMetadata(): returns SamlSpMetadata instead of a string (which was always '')
+$metadata = $orgs->fetchSAMLMetadata($orgId);
+$metadata->entityId; $metadata->acsUrl; $metadata->logoutUrl;
+
+// subscribeOrgToRoleMapping(): takes the mapping's name
+$orgs->subscribeOrgToRoleMapping($orgId, mappingName: 'Paid Plan');
+
+// getRoleMappings(): returns name and subscriber count
+// [['customRoleMappingName' => 'Paid Plan', 'numOrgsSubscribed' => 10]]
+
+// addUserToOrganisation() / inviteUserToOrganisation(): role is required
+$orgs->addUserToOrganisation($orgId, $userId, 'Member');
+```
+
+`OrganisationData::$maxOrgMembers` is renamed `$maxUsers`. Pending invite items use PropelAuth's fields (`inviteeEmail`, `roleInOrg`, `orgName`, …), and `getPendingInvites()` now pages.
+
+### Faking
+
+`EarhartFake` follows the same changes: memberships use `OrgMemberInfo`, and `issueToken()` tokens work with `verifyAccessToken()` too. Roles default to Owner > Admin > Member; change them with `withRoleHierarchy()` and `withRolePermissions()`.
 
 ## New: testing fake
 

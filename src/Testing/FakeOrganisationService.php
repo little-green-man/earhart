@@ -7,6 +7,7 @@ use LittleGreenMan\Earhart\Exceptions\InvalidOrgException;
 use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationData;
 use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
+use LittleGreenMan\Earhart\PropelAuth\SamlSpMetadata;
 use LittleGreenMan\Earhart\Services\CacheService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 
@@ -41,10 +42,16 @@ class FakeOrganisationService extends OrganisationService
             'canSetupSaml' => false,
             'isSamlConfigured' => false,
             'isSamlInTestMode' => false,
-            'customRoleMappingName' => 'default',
+            'customRoleMappingName' => 'Default',
             'createdAt' => now()->getTimestamp(),
             'metadata' => [],
             'isolated' => false,
+            'domain' => null,
+            'extraDomains' => [],
+            'domainAutojoin' => false,
+            'domainRestrict' => false,
+            'maxUsers' => null,
+            'legacyOrgId' => null,
         ], $attributes, ['orgId' => $orgId]);
     }
 
@@ -69,48 +76,98 @@ class FakeOrganisationService extends OrganisationService
         ?string $orderBy = null,
         int $pageNumber = 0,
         int $pageSize = 100,
+        ?string $name = null,
+        ?string $legacyOrgId = null,
+        ?string $domain = null,
     ): PaginatedResult {
-        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($orderBy, $pageNumber, $pageSize) {
-            $items = array_values(array_map(fn (array $org) => OrganisationData::fromArray($org), $this->state->orgs));
+        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($orderBy, $pageNumber, $pageSize, $name, $legacyOrgId, $domain) {
+            $orgs = array_filter($this->state->orgs, fn (array $org) => ($name === null || str_contains(strtolower($org['name']), strtolower($name)))
+                && ($legacyOrgId === null || $org['legacyOrgId'] === $legacyOrgId)
+                && ($domain === null || $org['domain'] === $domain));
+
+            $items = array_values(array_map(fn (array $org) => OrganisationData::fromArray($org), $orgs));
 
             return PaginatedResult::from(
                 $this->state->page($items, $pageNumber, $pageSize),
-                fn (int $nextPage) => $this->queryOrganisations($orderBy, $nextPage, $pageSize),
+                fn (int $nextPage) => $this->queryOrganisations($orderBy, $nextPage, $pageSize, $name, $legacyOrgId, $domain),
             );
         });
     }
 
-    public function getOrganisationUsers(string $orgId, int $pageSize = 100, int $pageNumber = 0): PaginatedResult
-    {
-        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($orgId, $pageSize, $pageNumber) {
+    public function getOrganisationUsers(
+        string $orgId,
+        int $pageSize = 100,
+        int $pageNumber = 0,
+        ?string $role = null,
+        bool $includeOrgs = false,
+    ): PaginatedResult {
+        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($orgId, $pageSize, $pageNumber, $role, $includeOrgs) {
             $this->requireOrg($orgId);
 
+            $members = array_filter($this->state->members[$orgId], fn (string $r) => $role === null || $r === $role);
+
             $items = array_map(
-                fn (string $userId) => $this->state->userData($userId),
-                array_keys($this->state->members[$orgId]),
+                fn (string $userId) => $this->state->userData($userId, $includeOrgs, $members[$userId]),
+                array_keys($members),
             );
 
             return PaginatedResult::from(
                 $this->state->page($items, $pageNumber, $pageSize),
-                fn (int $nextPage) => $this->getOrganisationUsers($orgId, $pageSize, $nextPage),
+                fn (int $nextPage) => $this->getOrganisationUsers($orgId, $pageSize, $nextPage, $role, $includeOrgs),
             );
         });
     }
 
-    public function createOrganisation(string $name, ?string $slug = null, ?array $metadata = null): string
-    {
+    public function createOrganisation(
+        string $name,
+        ?string $domain = null,
+        ?bool $enableAutoJoiningByDomain = null,
+        ?bool $membersMustHaveMatchingDomain = null,
+        ?int $maxUsers = null,
+        ?string $legacyOrgId = null,
+        ?string $customRoleMappingName = null,
+    ): string {
         return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->store(array_filter([
             'name' => $name,
-            'urlSafeOrgSlug' => $slug,
-            'metadata' => $metadata,
+            'domain' => $domain,
+            'domainAutojoin' => $enableAutoJoiningByDomain,
+            'domainRestrict' => $membersMustHaveMatchingDomain,
+            'maxUsers' => $maxUsers,
+            'legacyOrgId' => $legacyOrgId,
+            'customRoleMappingName' => $customRoleMappingName,
         ], fn ($v) => $v !== null))['orgId']);
     }
 
-    public function updateOrganisation(string $orgId, ?string $name = null, ?array $metadata = null): bool
-    {
+    public function updateOrganisation(
+        string $orgId,
+        ?string $name = null,
+        ?array $metadata = null,
+        ?string $domain = null,
+        ?array $extraDomains = null,
+        ?bool $autojoinByDomain = null,
+        ?bool $restrictToDomain = null,
+        ?int $maxUsers = null,
+        ?bool $canSetupSaml = null,
+        ?string $legacyOrgId = null,
+        ?string $ssoTrustLevel = null,
+        \DateTimeInterface|string|null $require2faBy = null,
+        ?bool $passwordRotationEnabled = null,
+        ?int $passwordRotationHistorySize = null,
+        ?int $passwordRotationPeriod = null,
+    ): bool {
         return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->set($orgId, array_filter([
             'name' => $name,
             'metadata' => $metadata,
+            'domain' => $domain,
+            'extraDomains' => $extraDomains,
+            'domainAutojoin' => $autojoinByDomain,
+            'domainRestrict' => $restrictToDomain,
+            'maxUsers' => $maxUsers,
+            'canSetupSaml' => $canSetupSaml,
+            'legacyOrgId' => $legacyOrgId,
+            'passwordRotationEnabled' => $passwordRotationEnabled,
+            'passwordRotationHistorySize' => $passwordRotationHistorySize,
+            'passwordRotationPeriod' => $passwordRotationPeriod,
         ], fn ($v) => $v !== null)));
     }
 
@@ -126,25 +183,35 @@ class FakeOrganisationService extends OrganisationService
         });
     }
 
-    public function addUserToOrganisation(string $orgId, string $userId, ?string $role = null): bool
+    public function addUserToOrganisation(string $orgId, string $userId, string $role, array $additionalRoles = []): bool
     {
         return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($orgId, $userId, $role) {
             if (! isset($this->state->orgs[$orgId], $this->state->users[$userId])) {
                 throw $this->notFound(__FUNCTION__);
             }
 
-            $this->storeMember($orgId, $userId, $role ?? 'Member');
+            $this->storeMember($orgId, $userId, $role);
 
             return true;
         });
     }
 
-    public function inviteUserToOrganisation(string $orgId, string $email, ?string $role = null): bool
+    public function inviteUserToOrganisation(string $orgId, string $email, string $role, array $additionalRoles = []): bool
     {
-        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($orgId, $email, $role) {
+        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($orgId, $email, $role, $additionalRoles) {
             $this->requireOrg($orgId);
 
-            $this->state->invites[] = ['orgId' => $orgId, 'inviteeEmail' => $email, 'role' => $role];
+            $this->state->invites[] = [
+                'inviteeEmail' => $email,
+                'orgId' => $orgId,
+                'orgName' => $this->state->orgs[$orgId]['name'],
+                'roleInOrg' => $role,
+                'additionalRolesInOrg' => $additionalRoles,
+                'createdAt' => now()->getTimestamp(),
+                'expiresAt' => now()->addDays(5)->getTimestamp(),
+                'inviterEmail' => null,
+                'inviterUserId' => null,
+            ];
 
             return true;
         });
@@ -161,7 +228,7 @@ class FakeOrganisationService extends OrganisationService
         });
     }
 
-    public function changeUserRole(string $orgId, string $userId, string $role): bool
+    public function changeUserRole(string $orgId, string $userId, string $role, array $additionalRoles = []): bool
     {
         return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($orgId, $userId, $role) {
             $this->requireMember($orgId, $userId, __FUNCTION__);
@@ -174,22 +241,30 @@ class FakeOrganisationService extends OrganisationService
 
     public function getRoleMappings(): array
     {
-        return $this->fake(__FUNCTION__, [], fn () => []);
+        return $this->fake(__FUNCTION__, [], function () {
+            $counts = array_count_values(array_column($this->state->orgs, 'customRoleMappingName'));
+
+            return array_map(
+                fn (string $name, int $count) => ['customRoleMappingName' => $name, 'numOrgsSubscribed' => $count],
+                array_keys($counts),
+                $counts,
+            );
+        });
     }
 
-    public function subscribeOrgToRoleMapping(string $orgId, string $mappingId): bool
+    public function subscribeOrgToRoleMapping(string $orgId, string $mappingName): bool
     {
-        return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->set($orgId, ['customRoleMappingName' => $mappingId]));
+        return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->set($orgId, ['customRoleMappingName' => $mappingName]));
     }
 
-    public function getPendingInvites(?string $orgId = null): PaginatedResult
+    public function getPendingInvites(?string $orgId = null, int $pageSize = 10, int $pageNumber = 0): PaginatedResult
     {
-        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($orgId) {
+        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($orgId, $pageSize, $pageNumber) {
             $items = array_values(array_filter($this->state->invites, fn (array $invite) => $orgId === null || $invite['orgId'] === $orgId));
 
             return PaginatedResult::from(
-                ['items' => $items, 'totalUsers' => count($items), 'pageSize' => max(count($items), 1)],
-                fn (int $nextPage) => $this->getPendingInvites($orgId),
+                $this->state->page($items, $pageNumber, $pageSize),
+                fn (int $nextPage) => $this->getPendingInvites($orgId, $pageSize, $nextPage),
             );
         });
     }
@@ -222,7 +297,7 @@ class FakeOrganisationService extends OrganisationService
         return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->set($orgId, ['canSetupSaml' => false]));
     }
 
-    public function createSAMLConnectionLink(string $orgId): string
+    public function createSAMLConnectionLink(string $orgId, ?int $expiresInSeconds = null): string
     {
         return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($orgId) {
             $this->requireOrg($orgId);
@@ -231,17 +306,26 @@ class FakeOrganisationService extends OrganisationService
         });
     }
 
-    public function fetchSAMLMetadata(string $orgId): string
+    public function fetchSAMLMetadata(string $orgId): SamlSpMetadata
     {
         return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($orgId) {
             $this->requireOrg($orgId);
 
-            return "<EntityDescriptor entityID=\"https://auth.example.test/saml/{$orgId}\"/>";
+            return new SamlSpMetadata(
+                entityId: "https://auth.example.test/saml/{$orgId}/metadata",
+                acsUrl: "https://auth.example.test/saml/{$orgId}/acs",
+                logoutUrl: "https://auth.example.test/saml/{$orgId}/logout",
+            );
         });
     }
 
-    public function setSAMLIdPMetadata(string $orgId, string $metadataXml): bool
-    {
+    public function setSAMLIdPMetadata(
+        string $orgId,
+        string $idpEntityId,
+        string $idpSsoUrl,
+        string $idpCertificate,
+        string $provider,
+    ): bool {
         return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->set($orgId, [
             'isSamlConfigured' => true,
             'isSamlInTestMode' => true,

@@ -56,7 +56,7 @@ describe('UserService', function () {
     describe('getUser', function () {
         test('fetches user from API', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(mockUserResponse()),
+                'https://auth.example.com/api/backend/v1/user/user123?*' => Http::response(mockUserResponse()),
             ]);
 
             $service = createUserService();
@@ -72,7 +72,7 @@ describe('UserService', function () {
 
         test('throws exception when user not found', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/invalid' => Http::response([], 404),
+                'https://auth.example.com/api/backend/v1/user/invalid?*' => Http::response([], 404),
             ]);
 
             $service = createUserService();
@@ -82,7 +82,7 @@ describe('UserService', function () {
 
         test('bypasses cache when fresh flag is true', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(mockUserResponse()),
+                'https://auth.example.com/api/backend/v1/user/user123?*' => Http::response(mockUserResponse()),
             ]);
 
             $service = createUserService($cacheEnabled = true);
@@ -557,7 +557,7 @@ describe('UserService', function () {
     describe('rate limiting', function () {
         test('throws rate limit exception on 429 response', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response([], 429),
+                'https://auth.example.com/api/backend/v1/user/user123?*' => Http::response([], 429),
             ]);
 
             $service = createUserService();
@@ -569,7 +569,7 @@ describe('UserService', function () {
             $callCount = 0;
 
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => function () use (&$callCount) {
+                'https://auth.example.com/api/backend/v1/user/user123?*' => function () use (&$callCount) {
                     $callCount++;
                     if ($callCount < 2) {
                         return Http::response([], 429);
@@ -589,7 +589,7 @@ describe('UserService', function () {
         });
 
         test('waits for Retry-After when it is within the cap', function () {
-            Http::fakeSequence('https://auth.example.com/api/backend/v1/user/user123')
+            Http::fakeSequence('https://auth.example.com/api/backend/v1/user/user123?*')
                 ->push([], 429, ['Retry-After' => '3'])
                 ->push(mockUserResponse());
 
@@ -600,7 +600,7 @@ describe('UserService', function () {
 
         test('fails at once when Retry-After exceeds the cap', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response([], 429, ['Retry-After' => '60']),
+                'https://auth.example.com/api/backend/v1/user/user123?*' => Http::response([], 429, ['Retry-After' => '60']),
             ]);
 
             expect(fn () => createUserService()->getUser('user123'))->toThrow(RateLimitException::class);
@@ -613,7 +613,7 @@ describe('UserService', function () {
             config(['earhart.retries.times' => 3, 'earhart.retries.base_delay_ms' => 2000, 'earhart.retries.max_delay_ms' => 5000]);
 
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response([], 429),
+                'https://auth.example.com/api/backend/v1/user/user123?*' => Http::response([], 429),
             ]);
 
             expect(fn () => createUserService()->getUser('user123'))->toThrow(RateLimitException::class);
@@ -629,7 +629,7 @@ describe('UserService', function () {
             config(['earhart.retries.times' => 0]);
 
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response([], 429),
+                'https://auth.example.com/api/backend/v1/user/user123?*' => Http::response([], 429),
             ]);
 
             expect(fn () => createUserService()->getUser('user123'))->toThrow(RateLimitException::class);
@@ -642,7 +642,7 @@ describe('UserService', function () {
     describe('typed errors', function () {
         test('throws PropelAuthException with status and context, keeping the body out of the message', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(['error' => 'jane@example.com broke it'], 500),
+                'https://auth.example.com/api/backend/v1/user/user123?*' => Http::response(['error' => 'jane@example.com broke it'], 500),
             ]);
 
             try {
@@ -659,7 +659,7 @@ describe('UserService', function () {
 
         test('truncates long response bodies in context', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(str_repeat('x', 5000), 500),
+                'https://auth.example.com/api/backend/v1/user/user123?*' => Http::response(str_repeat('x', 5000), 500),
             ]);
 
             try {
@@ -686,7 +686,7 @@ describe('UserService', function () {
 
         test('maps 401 and 403 to UnauthorizedException', function (int $status) {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response([], $status),
+                'https://auth.example.com/api/backend/v1/user/user123?*' => Http::response([], $status),
             ]);
 
             expect(fn () => createUserService()->getUser('user123'))->toThrow(UnauthorizedException::class);
@@ -694,7 +694,7 @@ describe('UserService', function () {
 
         test('does not retry non-rate-limit errors', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response([], 500),
+                'https://auth.example.com/api/backend/v1/user/user123?*' => Http::response([], 500),
             ]);
 
             expect(fn () => createUserService()->getUser('user123'))->toThrow(PropelAuthException::class);
@@ -704,7 +704,7 @@ describe('UserService', function () {
 
         test('a status key in the response body does not mask success', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => Http::response(mockUserResponse() + ['status' => 404]),
+                'https://auth.example.com/api/backend/v1/user/user123?*' => Http::response(mockUserResponse() + ['status' => 404]),
             ]);
 
             expect(createUserService()->getUser('user123')->userId)->toBe('user123');
@@ -716,7 +716,7 @@ describe('UserService', function () {
             $options = null;
 
             Http::fake([
-                'https://auth.example.com/api/backend/v1/user/user123' => function ($request, $requestOptions) use (&$options) {
+                'https://auth.example.com/api/backend/v1/user/user123?*' => function ($request, $requestOptions) use (&$options) {
                     $options = $requestOptions;
 
                     return Http::response(mockUserResponse());

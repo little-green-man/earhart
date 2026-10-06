@@ -58,29 +58,12 @@ class VerifyPropelAuthOrg
 
     /**
      * Check if user belongs to the specified organisation.
+     *
+     * Works with UserData (fetched with memberships) and AccessToken.
      */
     protected function userBelongsToOrg(mixed $user, string $orgId): bool
     {
-        // Check if user has orgs property (from UserData)
-        if (! isset($user->orgs) || ! is_array($user->orgs)) {
-            return false;
-        }
-
-        // Look for matching org ID
-        foreach ($user->orgs as $org) {
-            if (is_array($org) && ($org['id'] ?? null) === $orgId) {
-                return true;
-            }
-            if (is_object($org) && ($org->id ?? null) === $orgId) {
-                return true;
-            }
-            // Skip string conversion attempt for arrays to avoid "Array to string conversion" error
-            if (is_string($org) && $org === $orgId) {
-                return true;
-            }
-        }
-
-        return false;
+        return is_object($user) && method_exists($user, 'isMemberOf') && $user->isMemberOf($orgId);
     }
 
     /**

@@ -82,7 +82,31 @@ class EarhartFake extends Earhart
     }
 
     /**
-     * Issue an access token that validateToken() (and VerifyPropelAuthUser) accepts.
+     * Set the role hierarchy, highest first. Defaults to PropelAuth's Owner > Admin > Member.
+     *
+     * @param  list<string>  $roles
+     */
+    public function withRoleHierarchy(array $roles): static
+    {
+        $this->state->roleHierarchy = $roles;
+
+        return $this;
+    }
+
+    /**
+     * Set the permissions each role grants. A role also gets the permissions of roles below it.
+     *
+     * @param  array<string, list<string>>  $permissions  Keyed by role
+     */
+    public function withRolePermissions(array $permissions): static
+    {
+        $this->state->rolePermissions = $permissions;
+
+        return $this;
+    }
+
+    /**
+     * Issue an access token that validateToken(), verifyAccessToken() and VerifyPropelAuthUser accept.
      */
     public function issueToken(string $userId, ?string $token = null): string
     {

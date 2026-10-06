@@ -20,7 +20,7 @@ describe('OrganisationData', function () {
             'customRoleMappingName' => 'custom_roles',
             'createdAt' => 1609459200,
             'metadata' => ['industry' => 'technology'],
-            'maxOrgMembers' => 100,
+            'maxUsers' => 100,
         ];
     }
 
@@ -150,10 +150,10 @@ describe('OrganisationData', function () {
             ->toBeFalse();
     });
 
-    test('handles max org members', function () {
+    test('handles max users', function () {
         $org = OrganisationData::fromArray(mockOrgArray());
 
-        expect($org->maxOrgMembers)->toBe(100);
+        expect($org->maxUsers)->toBe(100);
     });
 
     test('preserves all fields in conversion', function () {

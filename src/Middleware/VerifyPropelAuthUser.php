@@ -5,6 +5,7 @@ namespace LittleGreenMan\Earhart\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use LittleGreenMan\Earhart\Exceptions\InvalidTokenException;
 use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
 use LittleGreenMan\Earhart\Services\UserService;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
@@ -30,7 +31,7 @@ class VerifyPropelAuthUser
         }
 
         try {
-            // Validate the token with PropelAuth
+            // Verify the token locally, then fetch the current user
             $user = $this->userService->validateToken($token);
 
             // Check if user is disabled
@@ -43,7 +44,7 @@ class VerifyPropelAuthUser
             $request->setUserResolver(fn () => $user);
 
             return $next($request);
-        } catch (InvalidUserException) {
+        } catch (InvalidTokenException|InvalidUserException) {
             return $this->unauthorized('Invalid or expired token');
         } catch (\Exception $e) {
             return $this->unauthorized('Authentication failed: '.$e->getMessage());

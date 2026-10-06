@@ -64,6 +64,11 @@ class PropelAuthException extends Exception
             $status === 429 => new RateLimitException($message),
             in_array($status, [400, 422], true) => new ValidationException($message, $errors, $status, $context),
             in_array($status, [401, 403], true) => new UnauthorizedException($message, $status, $context),
+            $status === 426 => new FeatureNotEnabledException(
+                "{$message}. The feature is not enabled for this PropelAuth project; organisations need B2B support enabled in the dashboard",
+                $status,
+                $context,
+            ),
             default => new self($message, $status, $context),
         };
     }

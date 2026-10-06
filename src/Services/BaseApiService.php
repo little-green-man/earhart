@@ -16,6 +16,19 @@ use LittleGreenMan\Earhart\Exceptions\RateLimitException;
  */
 abstract class BaseApiService
 {
+    /**
+     * Keys whose contents are user-defined or keyed by ID, so are never case-converted.
+     * `org_id_to_org_info` stays snake_case inside; OrgMemberInfo reads it as such.
+     */
+    protected const UNCONVERTED_KEYS = [
+        'properties',
+        'metadata',
+        'orgs',
+        'org_id_to_org_info',
+        'org_metadata',
+        'user_signup_query_parameters',
+    ];
+
     public function __construct(
         protected string $apiKey,
         protected string $authUrl,
@@ -48,9 +61,8 @@ abstract class BaseApiService
             }
 
             // Recursively convert nested arrays, but preserve user-defined data
-            // Don't convert keys in properties, metadata, or orgs arrays
             if (is_array($value)) {
-                $shouldSkipNested = $skipConversion || in_array($snakeKey, ['properties', 'metadata', 'orgs'], true);
+                $shouldSkipNested = $skipConversion || in_array($snakeKey, self::UNCONVERTED_KEYS, true);
                 $result[$snakeKey] = $this->toSnakeCase($value, $shouldSkipNested);
             } else {
                 $result[$snakeKey] = $value;
@@ -81,9 +93,8 @@ abstract class BaseApiService
             }
 
             // Recursively convert nested arrays, but preserve user-defined data
-            // Don't convert keys in properties, metadata, or orgs arrays
             if (is_array($value)) {
-                $shouldSkipNested = $skipConversion || in_array($key, ['properties', 'metadata', 'orgs'], true);
+                $shouldSkipNested = $skipConversion || in_array($key, self::UNCONVERTED_KEYS, true);
                 $result[$camelKey] = $this->toCamelCase($value, $shouldSkipNested);
             } else {
                 $result[$camelKey] = $value;

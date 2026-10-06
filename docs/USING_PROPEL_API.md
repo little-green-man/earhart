@@ -32,6 +32,7 @@ echo $user->emailConfirmed;  // true
 ## Table of Contents
 
 - [Getting Started](#getting-started)
+- [Validating Access Tokens](#validating-access-tokens)
 - [User Management](#user-management)
   - [Fetching Users](#fetching-users)
   - [Creating Users](#creating-users)
@@ -67,6 +68,31 @@ public function __construct(protected Earhart $earhart) {}
 
 Ensure your PropelAuth API key is configured in `.env` as `PROPELAUTH_API_KEY`.
 
+## Validating Access Tokens
+
+Access tokens are verified locally: Earhart fetches your environment's public key once from PropelAuth, caches it, and checks each token's signature, expiry and issuer, with 60 seconds of clock skew allowed.
+
+```php
+use LittleGreenMan\Earhart\Exceptions\InvalidTokenException;
+
+try {
+    // No API call per token
+    $token = app('earhart')->verifyAccessToken($request->bearerToken());
+    $token->userId;
+    $token->isAtLeastRoleIn($orgId, 'Admin');
+    $token->isImpersonated();
+
+    // Or verify, then fetch the current user (picks up a user disabled since the token was issued)
+    $user = app('earhart')->validateToken($request->bearerToken());
+} catch (InvalidTokenException $e) {
+    abort(401);
+}
+```
+
+`VerifyPropelAuthUser` uses `validateToken()`. To skip the key request, set `PROPELAUTH_VERIFIER_KEY` to the public key from the **Backend Integration** page. After rotating the key in PropelAuth, call `app('earhart')->users()->forgetVerifierKey()`.
+
+`VerifyPropelAuthOrg` and `VerifyPropelAuthPermission` read memberships from the user. `VerifyPropelAuthPermission` takes a role and passes any user whose role inherits it (an Owner passes `Admin`), or `permission:<name>` to check a permission.
+
 ## User Management
 
 > **PropelAuth User API Reference**: [https://docs.propelauth.com/reference/api/user](https://docs.propelauth.com/reference/api/user)
@@ -99,12 +125,17 @@ try {
     // Access custom properties
     $properties = $user->properties;
     
-    // Access user's organizations
-    foreach ($user->orgs as $org) {
-        echo $org['orgId'];
-        echo $org['orgName'];
-        echo $org['userAssignedRole'];
+    // Memberships (included by default; pass includeOrgs: false to skip)
+    foreach ($user->orgs as $orgId => $org) {   // OrgMemberInfo, keyed by org ID
+        echo $org->orgName;
+        echo $org->userRole;                    // e.g. Admin
+        print_r($org->userPermissions);         // e.g. ['propelauth::can_invite']
     }
+
+    $user->isMemberOf($orgId);
+    $user->roleIn($orgId);                      // Admin
+    $user->isAtLeastRoleIn($orgId, 'Member');   // true: uses your role hierarchy
+    $user->hasPermissionIn($orgId, 'propelauth::can_invite');
 } catch (InvalidUserException $e) {
     // User not found
     Log::error('User not found: ' . $e->getMessage());
@@ -478,15 +509,15 @@ foreach ($users as $user) {
 ```php
 $orgId = app('earhart')->organisations()->createOrganisation(
     name: 'New Company Inc',
-    slug: 'new-company',
-    metadata: [
-        'industry' => 'Technology',
-        'size' => 'Enterprise',
-        'country' => 'US'
-    ]
+    domain: 'newcompany.com',
+    enableAutoJoiningByDomain: true,       // Users with a matching email domain can join without an invite
+    membersMustHaveMatchingDomain: false,
+    maxUsers: 50,
+    customRoleMappingName: 'Business Plan',
 );
 
-echo "Created organization with ID: {$orgId}";
+// Metadata can't be set on create; follow up with an update
+app('earhart')->organisations()->updateOrganisation($orgId, metadata: ['industry' => 'Technology']);
 ```
 
 #### Update Organisation
@@ -497,12 +528,14 @@ echo "Created organization with ID: {$orgId}";
 app('earhart')->organisations()->updateOrganisation(
     orgId: 'org_id_here',
     name: 'Updated Company Name',
-    metadata: [
-        'industry' => 'Software',
-        'updated_at' => now()->toIso8601String()
-    ]
+    metadata: ['industry' => 'Software'],
+    autojoinByDomain: true,
+    maxUsers: 100,
+    require2faBy: now()->addMonth(),   // or a string like "2026-01-20 12:34:56 UTC"
 );
 ```
+
+Only the arguments you pass are changed. Also available: `domain`, `extraDomains`, `restrictToDomain`, `canSetupSaml`, `legacyOrgId`, `ssoTrustLevel` and the `passwordRotation*` settings.
 
 #### Delete Organisation
 
@@ -528,7 +561,8 @@ try {
 app('earhart')->organisations()->addUserToOrganisation(
     orgId: 'org_id_here',
     userId: 'user_id_here',
-    role: 'Member'
+    role: 'Member',                 // Required
+    additionalRoles: ['Billing'],   // Optional, for multi-role setups
 );
 ```
 
@@ -540,7 +574,7 @@ app('earhart')->organisations()->addUserToOrganisation(
 app('earhart')->organisations()->inviteUserToOrganisation(
     orgId: 'org_id_here',
     email: 'newuser@example.com',
-    role: 'Admin'
+    role: 'Admin',                  // Required
 );
 ```
 
@@ -577,9 +611,7 @@ app('earhart')->organisations()->changeUserRole(
 $roleMappings = app('earhart')->organisations()->getRoleMappings();
 
 foreach ($roleMappings as $mapping) {
-    echo "Role mapping ID: {$mapping['customRoleMappingId']}\n";
-    echo "Name: {$mapping['name']}\n";
-    // Access role definitions
+    echo "{$mapping['customRoleMappingName']}: {$mapping['numOrgsSubscribed']} organisations\n";
 }
 ```
 
@@ -590,7 +622,7 @@ foreach ($roleMappings as $mapping) {
 ```php
 app('earhart')->organisations()->subscribeOrgToRoleMapping(
     orgId: 'org_id_here',
-    mappingId: 'mapping_id_here'
+    mappingName: 'Paid Plan',
 );
 ```
 
@@ -604,14 +636,14 @@ app('earhart')->organisations()->subscribeOrgToRoleMapping(
 // Get all pending invites
 $result = app('earhart')->organisations()->getPendingInvites();
 
-foreach ($result->items as $invite) {
-    echo "Email: {$invite['email']}\n";
+foreach ($result->allPages() as $invite) {
+    echo "Email: {$invite['inviteeEmail']}\n";
     echo "Org: {$invite['orgName']}\n";
-    echo "Role: {$invite['role']}\n";
+    echo "Role: {$invite['roleInOrg']}\n";
 }
 
-// Get pending invites for specific org
-$result = app('earhart')->organisations()->getPendingInvites(orgId: 'org_id_here');
+// For one organisation, paged
+$result = app('earhart')->organisations()->getPendingInvites(orgId: 'org_id_here', pageSize: 20, pageNumber: 0);
 ```
 
 #### Revoke Pending Invite
@@ -638,7 +670,7 @@ app('earhart')->organisations()->allowOrgToSetupSAML('org_id_here');
 #### Create SAML Connection Link
 
 ```php
-$url = app('earhart')->organisations()->createSAMLConnectionLink('org_id_here');
+$url = app('earhart')->organisations()->createSAMLConnectionLink('org_id_here', expiresInSeconds: 86400);
 return redirect($url);
 ```
 
@@ -647,18 +679,21 @@ return redirect($url);
 ```php
 $metadata = app('earhart')->organisations()->fetchSAMLMetadata('org_id_here');
 
-// Return as XML response
-return response($metadata)->header('Content-Type', 'application/xml');
+// Give these to the organisation's IdP
+echo $metadata->entityId;
+echo $metadata->acsUrl;
+echo $metadata->logoutUrl;
 ```
 
 #### Set SAML IdP Metadata
 
 ```php
-$metadataXml = '<?xml version="1.0"?>...'; // IdP metadata XML
-
 app('earhart')->organisations()->setSAMLIdPMetadata(
     orgId: 'org_id_here',
-    metadataXml: $metadataXml
+    idpEntityId: 'http://www.okta.com/example',
+    idpSsoUrl: 'https://dev.okta.com/app/example/sso/saml',
+    idpCertificate: '-----BEGIN CERTIFICATE-----...-----END CERTIFICATE-----',
+    provider: 'Okta',
 );
 ```
 
@@ -807,6 +842,8 @@ Every API failure throws a `PropelAuthException` or one of its subclasses. Each 
 | `ValidationException` | 400 or 422. `getErrors()` returns PropelAuth's error body |
 | `UnauthorizedException` | 401 or 403, usually a wrong or under-privileged API key |
 | `RateLimitException` | 429 after retries are used up. `$retryAfterSeconds` holds the wait |
+| `InvalidTokenException` | An access token is malformed, expired, or from another environment |
+| `FeatureNotEnabledException` | 426: the feature isn't enabled for the project (organisation calls need B2B support) |
 | `PropelAuthException` | Anything else, including a 404 on calls naming both a user and an organisation |
 
 Write methods return `true` on success and throw on failure, so a missing user or organisation never passes silently.
@@ -916,7 +953,8 @@ test('admins can disable a user', function () {
 $user = $fake->addUser(['email' => 'jane@example.com', 'firstName' => 'Jane']); // UserData; missing fields get defaults
 $org = $fake->addOrganisation(['name' => 'Acme'], members: [$user->userId => 'Admin']);
 $fake->addMember($org->orgId, $otherUserId, 'Member');
-$token = $fake->issueToken($user->userId); // Accepted by validateToken() and VerifyPropelAuthUser
+$token = $fake->issueToken($user->userId); // Accepted by validateToken(), verifyAccessToken() and VerifyPropelAuthUser
+$fake->withRolePermissions(['Admin' => ['propelauth::can_invite']]); // Roles default to Owner > Admin > Member
 ```
 
 Seeding is not recorded as a call.

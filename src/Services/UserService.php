@@ -2,8 +2,13 @@
 
 namespace LittleGreenMan\Earhart\Services;
 
+use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
+use Illuminate\Support\Facades\Cache;
+use LittleGreenMan\Earhart\Exceptions\InvalidTokenException;
 use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
 use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
+use LittleGreenMan\Earhart\PropelAuth\AccessToken;
 use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
 
@@ -12,34 +17,92 @@ class UserService extends BaseApiService
     /**
      * Fetch user by ID with optional caching.
      *
+     * Memberships are included unless $includeOrgs is false. Only the
+     * with-memberships form is cached.
+     *
      * @throws InvalidUserException If the user does not exist
      * @throws PropelAuthException On any other API failure
      */
-    public function getUser(string $userId, bool $fresh = false): UserData
+    public function getUser(string $userId, bool $fresh = false, bool $includeOrgs = true): UserData
     {
-        if (! $fresh && $this->cache->isEnabled()) {
-            return $this->cache->get("user.{$userId}", fn () => $this->fetchUserFromAPI($userId));
+        if (! $fresh && $includeOrgs && $this->cache->isEnabled()) {
+            return $this->cache->get("user.{$userId}", fn () => $this->fetchUserFromAPI($userId, true));
         }
 
-        return $this->fetchUserFromAPI($userId);
+        return $this->fetchUserFromAPI($userId, $includeOrgs);
     }
 
     /**
-     * Validate a PropelAuth session token and return the authenticated user.
+     * Verify an access token and return the full user.
      *
-     * This method is typically called by authentication middleware to verify
-     * that a session token is valid and retrieve the associated user data.
+     * The token is verified locally (see verifyAccessToken()), then the user
+     * is fetched with getUser() so the result is current: a user disabled
+     * since the token was issued comes back with `enabled` false.
      *
-     * @throws InvalidUserException If the user does not exist
+     * @throws InvalidTokenException If the token is invalid or expired
+     * @throws InvalidUserException If the user no longer exists
      * @throws PropelAuthException On any other API failure
      */
     public function validateToken(string $token): UserData
     {
-        $response = $this->makeRequest('GET', '/api/backend/v1/user/me', [
-            'token' => $token,
-        ], fn () => InvalidUserException::notFound('current'));
+        $accessToken = $this->verifyAccessToken($token);
 
-        return UserData::fromArray($response);
+        try {
+            return $this->getUser($accessToken->userId);
+        } catch (InvalidUserException $e) {
+            throw InvalidTokenException::because('the user no longer exists', $e);
+        }
+    }
+
+    /**
+     * Verify an access token locally and return its claims, with no API call per token.
+     *
+     * Checks the RS256 signature against your environment's verifier key,
+     * plus the expiry, issue time and issuer, allowing 60 seconds of clock
+     * skew. The key is fetched once from PropelAuth and cached, or set with
+     * `earhart.token_verification.verifier_key`.
+     *
+     * @throws InvalidTokenException If the token is invalid or expired
+     * @throws PropelAuthException If the verifier key can't be fetched
+     */
+    public function verifyAccessToken(string $token): AccessToken
+    {
+        $token = preg_replace('/^Bearer\s+/i', '', trim($token));
+
+        $previousLeeway = JWT::$leeway;
+        JWT::$leeway = 60;
+
+        try {
+            $claims = (array) json_decode(
+                (string) json_encode(JWT::decode($token, new Key($this->verifierKey(), 'RS256'))),
+                true,
+            );
+        } catch (\Throwable $e) {
+            // php-jwt throws TypeError, not an Exception, for some malformed tokens
+            throw InvalidTokenException::because($e->getMessage(), $e instanceof \Exception ? $e : null);
+        } finally {
+            JWT::$leeway = $previousLeeway;
+        }
+
+        foreach (['exp', 'iat', 'iss', 'user_id'] as $claim) {
+            if (! isset($claims[$claim])) {
+                throw InvalidTokenException::because("missing the {$claim} claim");
+            }
+        }
+
+        if (rtrim($claims['iss'], '/') !== $this->issuer()) {
+            throw InvalidTokenException::because('issued by a different PropelAuth environment');
+        }
+
+        return AccessToken::fromClaims($claims);
+    }
+
+    /**
+     * Forget the cached verifier key, e.g. after rotating it in PropelAuth.
+     */
+    public function forgetVerifierKey(): void
+    {
+        Cache::forget($this->verifierKeyCacheKey());
     }
 
     /**
@@ -48,12 +111,13 @@ class UserService extends BaseApiService
      * @throws InvalidUserException If the user does not exist
      * @throws PropelAuthException On any other API failure
      */
-    public function getUserByEmail(string $email, bool $includeOrgs = true): UserData
+    public function getUserByEmail(string $email, bool $includeOrgs = true, ?string $isolatedOrgId = null): UserData
     {
-        $response = $this->makeRequest('GET', '/api/backend/v1/user/email', [
+        $response = $this->makeRequest('GET', '/api/backend/v1/user/email', array_filter([
             'email' => $email,
             'includeOrgs' => $includeOrgs,
-        ], fn () => InvalidUserException::byEmail($email));
+            'isolatedOrgId' => $isolatedOrgId,
+        ], fn ($v) => $v !== null), fn () => InvalidUserException::byEmail($email));
 
         return UserData::fromArray($response);
     }
@@ -64,18 +128,21 @@ class UserService extends BaseApiService
      * @throws InvalidUserException If the user does not exist
      * @throws PropelAuthException On any other API failure
      */
-    public function getUserByUsername(string $username, bool $includeOrgs = true): UserData
+    public function getUserByUsername(string $username, bool $includeOrgs = true, ?string $isolatedOrgId = null): UserData
     {
-        $response = $this->makeRequest('GET', '/api/backend/v1/user/username', [
+        $response = $this->makeRequest('GET', '/api/backend/v1/user/username', array_filter([
             'username' => $username,
             'includeOrgs' => $includeOrgs,
-        ], fn () => InvalidUserException::byUsername($username));
+            'isolatedOrgId' => $isolatedOrgId,
+        ], fn ($v) => $v !== null), fn () => InvalidUserException::byUsername($username));
 
         return UserData::fromArray($response);
     }
 
     /**
      * Query users with pagination and filtering.
+     *
+     * @param  ?string  $orderBy  CREATED_AT_ASC, CREATED_AT_DESC, LAST_ACTIVE_AT_ASC, LAST_ACTIVE_AT_DESC, EMAIL or USERNAME
      *
      * @throws PropelAuthException On any API failure
      */
@@ -84,6 +151,9 @@ class UserService extends BaseApiService
         ?string $orderBy = 'CREATED_AT_DESC',
         int $pageNumber = 0,
         int $pageSize = 10,
+        ?string $legacyUserId = null,
+        bool $includeOrgs = false,
+        ?string $isolatedOrgId = null,
     ): PaginatedResult {
         $params = array_filter(
             [
@@ -91,6 +161,9 @@ class UserService extends BaseApiService
                 'orderBy' => $orderBy,
                 'pageNumber' => $pageNumber,
                 'pageSize' => $pageSize,
+                'legacyUserId' => $legacyUserId,
+                'includeOrgs' => $includeOrgs,
+                'isolatedOrgId' => $isolatedOrgId,
             ],
             fn ($v) => $v !== null,
         );
@@ -109,6 +182,9 @@ class UserService extends BaseApiService
             $orderBy,
             $nextPage,
             $pageSize,
+            $legacyUserId,
+            $includeOrgs,
+            $isolatedOrgId,
         ));
     }
 
@@ -125,6 +201,9 @@ class UserService extends BaseApiService
         ?string $username = null,
         ?array $properties = null,
         bool $sendConfirmationEmail = false,
+        ?bool $emailConfirmed = null,
+        ?bool $ignoreDomainRestrictions = null,
+        ?bool $askUserToUpdatePasswordOnLogin = null,
     ): string {
         $payload = array_filter(
             [
@@ -135,6 +214,9 @@ class UserService extends BaseApiService
                 'username' => $username,
                 'properties' => $properties,
                 'sendEmailToConfirmEmailAddress' => $sendConfirmationEmail,
+                'emailConfirmed' => $emailConfirmed,
+                'ignoreDomainRestrictions' => $ignoreDomainRestrictions,
+                'askUserToUpdatePasswordOnLogin' => $askUserToUpdatePasswordOnLogin,
             ],
             fn ($v) => $v !== null,
         );
@@ -239,6 +321,9 @@ class UserService extends BaseApiService
         ?string $redirectUrl = null,
         ?int $expiresInHours = 24,
         bool $createIfNotExists = false,
+        ?bool $expireAfterFirstUse = null,
+        ?bool $requiresInterstitial = null,
+        ?array $userSignupQueryParameters = null,
     ): string {
         $payload = array_filter(
             [
@@ -246,6 +331,9 @@ class UserService extends BaseApiService
                 'redirectToUrl' => $redirectUrl,
                 'expiresInHours' => $expiresInHours,
                 'createNewUserIfOneDoesntExist' => $createIfNotExists,
+                'expireAfterFirstUse' => $expireAfterFirstUse,
+                'requiresInterstitial' => $requiresInterstitial,
+                'userSignupQueryParameters' => $userSignupQueryParameters,
             ],
             fn ($v) => $v !== null,
         );
@@ -393,11 +481,17 @@ class UserService extends BaseApiService
         ?string $lastName = null,
         ?string $username = null,
         ?array $properties = null,
+        ?bool $updatePasswordRequired = null,
+        ?bool $enabled = null,
+        ?string $pictureUrl = null,
     ): string {
         $payload = array_filter(
             [
                 'email' => $email,
                 'emailConfirmed' => $emailConfirmed,
+                'updatePasswordRequired' => $updatePasswordRequired,
+                'enabled' => $enabled,
+                'pictureUrl' => $pictureUrl,
                 'existingUserId' => $existingUserId,
                 'existingPasswordHash' => $existingPasswordHash,
                 'existingMfaBase32EncodedSecret' => $existingMfaSecret,
@@ -435,10 +529,44 @@ class UserService extends BaseApiService
     /**
      * Fetch user from API (bypasses cache).
      */
-    protected function fetchUserFromAPI(string $userId): UserData
+    protected function fetchUserFromAPI(string $userId, bool $includeOrgs = true): UserData
     {
-        $response = $this->makeRequest('GET', "/api/backend/v1/user/{$userId}", notFound: fn () => InvalidUserException::notFound($userId));
+        $response = $this->makeRequest('GET', "/api/backend/v1/user/{$userId}", [
+            'includeOrgs' => $includeOrgs,
+        ], fn () => InvalidUserException::notFound($userId));
 
         return UserData::fromArray($response);
+    }
+
+    /**
+     * The PEM public key that signs this environment's access tokens.
+     */
+    protected function verifierKey(): string
+    {
+        $configured = config('earhart.token_verification.verifier_key');
+
+        if (is_string($configured) && $configured !== '') {
+            return str_replace('\\n', "\n", $configured);
+        }
+
+        return Cache::remember(
+            $this->verifierKeyCacheKey(),
+            now()->addMinutes((int) config('earhart.token_verification.cache_minutes', 1440)),
+            fn () => $this->makeRequest('GET', '/api/v1/token_verification_metadata')['verifierKeyPem']
+                ?? throw new PropelAuthException('PropelAuth token verification metadata has no verifier_key_pem'),
+        );
+    }
+
+    protected function verifierKeyCacheKey(): string
+    {
+        return 'propelauth.verifier_key.'.md5($this->authUrl);
+    }
+
+    /**
+     * The expected `iss` claim: the Auth URL, without a trailing slash.
+     */
+    protected function issuer(): string
+    {
+        return rtrim((string) (config('earhart.token_verification.issuer') ?: $this->authUrl), '/');
     }
 }

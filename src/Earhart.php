@@ -3,10 +3,13 @@
 namespace LittleGreenMan\Earhart;
 
 use LittleGreenMan\Earhart\Exceptions\InvalidOrgException;
+use LittleGreenMan\Earhart\Exceptions\InvalidTokenException;
 use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
 use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
+use LittleGreenMan\Earhart\PropelAuth\AccessToken;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationData;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationsData;
+use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
 use LittleGreenMan\Earhart\Services\CacheService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
@@ -56,9 +59,30 @@ class Earhart
      * @throws InvalidUserException If the user does not exist
      * @throws PropelAuthException On any other API failure
      */
-    public function getUser(string $userId, bool $fresh = false): UserData
+    public function getUser(string $userId, bool $fresh = false, bool $includeOrgs = true): UserData
     {
-        return $this->userService->getUser($userId, $fresh);
+        return $this->userService->getUser($userId, $fresh, $includeOrgs);
+    }
+
+    /**
+     * Verify an access token locally, then fetch the current user.
+     *
+     * @throws InvalidTokenException If the token is invalid or expired
+     * @throws PropelAuthException On any other API failure
+     */
+    public function validateToken(string $token): UserData
+    {
+        return $this->userService->validateToken($token);
+    }
+
+    /**
+     * Verify an access token locally and return its claims, with no API call per token.
+     *
+     * @throws InvalidTokenException If the token is invalid or expired
+     */
+    public function verifyAccessToken(string $token): AccessToken
+    {
+        return $this->userService->verifyAccessToken($token);
     }
 
     /**
@@ -67,9 +91,9 @@ class Earhart
      * @throws InvalidUserException If the user does not exist
      * @throws PropelAuthException On any other API failure
      */
-    public function getUserByEmail(string $email, bool $includeOrgs = true): UserData
+    public function getUserByEmail(string $email, bool $includeOrgs = true, ?string $isolatedOrgId = null): UserData
     {
-        return $this->userService->getUserByEmail($email, $includeOrgs);
+        return $this->userService->getUserByEmail($email, $includeOrgs, $isolatedOrgId);
     }
 
     /**
@@ -78,9 +102,9 @@ class Earhart
      * @throws InvalidUserException If the user does not exist
      * @throws PropelAuthException On any other API failure
      */
-    public function getUserByUsername(string $username, bool $includeOrgs = true): UserData
+    public function getUserByUsername(string $username, bool $includeOrgs = true, ?string $isolatedOrgId = null): UserData
     {
-        return $this->userService->getUserByUsername($username, $includeOrgs);
+        return $this->userService->getUserByUsername($username, $includeOrgs, $isolatedOrgId);
     }
 
     /**
@@ -93,8 +117,11 @@ class Earhart
         ?string $orderBy = 'CREATED_AT_DESC',
         int $pageNumber = 0,
         int $pageSize = 10,
-    ) {
-        return $this->userService->queryUsers($emailOrUsername, $orderBy, $pageNumber, $pageSize);
+        ?string $legacyUserId = null,
+        bool $includeOrgs = false,
+        ?string $isolatedOrgId = null,
+    ): PaginatedResult {
+        return $this->userService->queryUsers($emailOrUsername, $orderBy, $pageNumber, $pageSize, $legacyUserId, $includeOrgs, $isolatedOrgId);
     }
 
     /**
@@ -110,6 +137,9 @@ class Earhart
         ?string $username = null,
         ?array $properties = null,
         bool $sendConfirmationEmail = false,
+        ?bool $emailConfirmed = null,
+        ?bool $ignoreDomainRestrictions = null,
+        ?bool $askUserToUpdatePasswordOnLogin = null,
     ): string {
         return $this->userService->createUser(
             $email,
@@ -119,6 +149,9 @@ class Earhart
             $username,
             $properties,
             $sendConfirmationEmail,
+            $emailConfirmed,
+            $ignoreDomainRestrictions,
+            $askUserToUpdatePasswordOnLogin,
         );
     }
 
@@ -193,8 +226,19 @@ class Earhart
         ?string $redirectUrl = null,
         ?int $expiresInHours = 24,
         bool $createIfNotExists = false,
+        ?bool $expireAfterFirstUse = null,
+        ?bool $requiresInterstitial = null,
+        ?array $userSignupQueryParameters = null,
     ): string {
-        return $this->userService->createMagicLink($email, $redirectUrl, $expiresInHours, $createIfNotExists);
+        return $this->userService->createMagicLink(
+            $email,
+            $redirectUrl,
+            $expiresInHours,
+            $createIfNotExists,
+            $expireAfterFirstUse,
+            $requiresInterstitial,
+            $userSignupQueryParameters,
+        );
     }
 
     /**
@@ -303,6 +347,9 @@ class Earhart
         ?string $lastName = null,
         ?string $username = null,
         ?array $properties = null,
+        ?bool $updatePasswordRequired = null,
+        ?bool $enabled = null,
+        ?string $pictureUrl = null,
     ): string {
         return $this->userService->migrateUserFromExternal(
             $email,
@@ -314,6 +361,9 @@ class Earhart
             $lastName,
             $username,
             $properties,
+            $updatePasswordRequired,
+            $enabled,
+            $pictureUrl,
         );
     }
 

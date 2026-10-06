@@ -21,8 +21,19 @@ class FakeState
     /** @var array<string, array<string, string>> Roles keyed by org ID, then user ID */
     public array $members = [];
 
-    /** @var list<array{orgId: string, inviteeEmail: string, role: ?string}> */
+    /** @var list<array<string, mixed>> Pending invites, in PropelAuth's (camelCase) shape */
     public array $invites = [];
+
+    /**
+     * Roles from highest to lowest. A role inherits every role below it,
+     * matching PropelAuth's default Owner > Admin > Member.
+     *
+     * @var list<string>
+     */
+    public array $roleHierarchy = ['Owner', 'Admin', 'Member'];
+
+    /** @var array<string, list<string>> Permissions keyed by role */
+    public array $rolePermissions = [];
 
     /** @var array<string, string> User IDs keyed by access token */
     public array $tokens = [];
@@ -51,21 +62,47 @@ class FakeState
         return null;
     }
 
-    public function userData(string $userId): UserData
+    public function userData(string $userId, bool $includeOrgs = true, ?string $roleInOrg = null): UserData
+    {
+        return UserData::fromArray($this->users[$userId] + [
+            'orgIdToOrgInfo' => $includeOrgs ? $this->orgInfo($userId) : [],
+            'roleInOrg' => $roleInOrg,
+        ]);
+    }
+
+    /**
+     * The user's memberships in PropelAuth's `org_id_to_org_info` shape.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function orgInfo(string $userId): array
     {
         $orgs = [];
 
         foreach ($this->members as $orgId => $members) {
-            if (isset($members[$userId])) {
-                $orgs[$orgId] = [
-                    'orgId' => $orgId,
-                    'orgName' => $this->orgs[$orgId]['name'],
-                    'userRole' => $members[$userId],
-                ];
+            if (! isset($members[$userId])) {
+                continue;
             }
+
+            $role = $members[$userId];
+            $position = array_search($role, $this->roleHierarchy, true);
+            $inherited = $position === false ? [$role] : array_slice($this->roleHierarchy, $position);
+
+            $orgs[$orgId] = [
+                'org_id' => $orgId,
+                'org_name' => $this->orgs[$orgId]['name'],
+                'url_safe_org_name' => $this->orgs[$orgId]['urlSafeOrgSlug'],
+                'org_metadata' => $this->orgs[$orgId]['metadata'],
+                'user_role' => $role,
+                'inherited_user_roles_plus_current_role' => $inherited,
+                'user_permissions' => array_values(array_unique(array_merge(
+                    ...array_map(fn (string $r) => $this->rolePermissions[$r] ?? [], $inherited),
+                ))),
+                'additional_roles' => [],
+            ];
         }
 
-        return UserData::fromArray($this->users[$userId] + ['orgs' => $orgs]);
+        return $orgs;
     }
 
     /**

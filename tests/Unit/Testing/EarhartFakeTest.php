@@ -124,7 +124,9 @@ describe('organisations', function () {
         PropelAuth::organisations()->addUserToOrganisation($org->orgId, $user->userId, 'Admin');
 
         expect(PropelAuth::getUsersInOrganisation($org->orgId))->toHaveCount(1)
-            ->and(PropelAuth::getUser($user->userId)->orgs[$org->orgId]['userRole'])->toBe('Admin');
+            ->and(PropelAuth::getUser($user->userId)->roleIn($org->orgId))->toBe('Admin')
+            ->and(PropelAuth::getUser($user->userId)->isAtLeastRoleIn($org->orgId, 'Member'))->toBeTrue()
+            ->and(PropelAuth::organisations()->getOrganisationUsers($org->orgId)->items[0]->roleInOrg)->toBe('Admin');
 
         PropelAuth::organisations()->removeUserFromOrganisation($org->orgId, $user->userId);
 
@@ -151,7 +153,7 @@ describe('organisations', function () {
         $fake = Earhart::fake();
         $orgId = PropelAuth::organisations()->createOrganisation('Acme');
 
-        PropelAuth::organisations()->setSAMLIdPMetadata($orgId, '<xml/>');
+        PropelAuth::organisations()->setSAMLIdPMetadata($orgId, 'https://idp/entity', 'https://idp/sso', 'CERT', 'Okta');
         PropelAuth::organisations()->enableSAMLConnection($orgId);
 
         $org = PropelAuth::getOrganisation($orgId);

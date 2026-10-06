@@ -3,241 +3,93 @@
 namespace LittleGreenMan\Earhart\Tests\Unit\Middleware;
 
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use LittleGreenMan\Earhart\Middleware\VerifyPropelAuthOrg;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
+use LittleGreenMan\Earhart\Services\CacheService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 use LittleGreenMan\Earhart\Tests\TestCase;
 
 uses(TestCase::class);
 
+function memberOf(string ...$orgIds): UserData
+{
+    $orgs = [];
+
+    foreach ($orgIds as $orgId) {
+        $orgs[$orgId] = ['org_id' => $orgId, 'org_name' => 'Acme', 'user_role' => 'Member'];
+    }
+
+    return UserData::fromArray([
+        'userId' => 'user123',
+        'email' => 'test@example.com',
+        'emailConfirmed' => true,
+        'pictureUrl' => 'https://example.com/pic.jpg',
+        'createdAt' => 1609459200,
+        'lastActiveAt' => 1609459200,
+        'orgIdToOrgInfo' => $orgs,
+    ]);
+}
+
+function orgRequest(mixed $user, array $attributes = []): Request
+{
+    $request = Request::create('/');
+    $request->attributes->set('propelauth_user', $user);
+
+    foreach ($attributes as $key => $value) {
+        $request->attributes->set($key, $value);
+    }
+
+    return $request;
+}
+
+function orgMiddleware(): VerifyPropelAuthOrg
+{
+    return new VerifyPropelAuthOrg(new OrganisationService('key', 'https://auth.example.com', new CacheService(false)));
+}
+
 describe('VerifyPropelAuthOrg', function () {
-    function mockUserWithOrgs(array $orgs = []): UserData
-    {
-        $defaultOrgs = [
-            [
-                'id' => 'org123',
-                'display_name' => 'Acme Corp',
-                'user_role' => 'owner',
-            ],
-        ];
+    test('allows a member and stores the org ID', function () {
+        $request = orgRequest(memberOf('org123'), ['org_id' => 'org123']);
 
-        return UserData::fromArray([
-            'userId' => 'user123',
-            'email' => 'test@example.com',
-            'emailConfirmed' => true,
-            'firstName' => 'John',
-            'lastName' => 'Doe',
-            'username' => 'johndoe',
-            'pictureUrl' => 'https://example.com/pic.jpg',
-            'properties' => [],
-            'locked' => false,
-            'enabled' => true,
-            'hasPassword' => true,
-            'updatePasswordRequired' => false,
-            'mfaEnabled' => false,
-            'canCreateOrgs' => true,
-            'createdAt' => 1609459200,
-            'lastActiveAt' => 1609459200,
-            'orgs' => $orgs ?: $defaultOrgs,
-        ]);
-    }
+        $response = orgMiddleware()->handle($request, fn () => response('OK'));
 
-    function createOrgMiddleware(?OrganisationService $orgService = null): VerifyPropelAuthOrg
-    {
-        if (! $orgService) {
-            $orgService = mock(OrganisationService::class);
-        }
-
-        return new VerifyPropelAuthOrg($orgService);
-    }
-
-    test('allows request when user belongs to organisation', function () {
-        $user = mockUserWithOrgs([
-            [
-                'id' => 'org123',
-                'display_name' => 'Acme Corp',
-                'user_role' => 'owner',
-            ],
-        ]);
-
-        $middleware = createOrgMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'org_id');
-
-        expect($response->getStatusCode())->toBe(200);
-        expect($request->attributes->get('propelauth_org_id'))->toBe('org123');
+        expect($response->getStatusCode())->toBe(200)
+            ->and($request->attributes->get('propelauth_org_id'))->toBe('org123');
     });
 
-    test('rejects request when user does not belong to organisation', function () {
-        $user = mockUserWithOrgs([
-            [
-                'id' => 'org999',
-                'display_name' => 'Other Corp',
-                'user_role' => 'member',
-            ],
-        ]);
+    test('rejects a non-member', function () {
+        $response = orgMiddleware()->handle(orgRequest(memberOf('org999'), ['org_id' => 'org123']), fn () => response('OK'));
 
-        $middleware = createOrgMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'org_id');
-
-        expect($response->getStatusCode())->toBe(Response::HTTP_FORBIDDEN);
-        expect($response->getContent())->toContain('does not belong to organisation');
+        expect($response->getStatusCode())->toBe(403);
     });
 
-    test('rejects request when user not authenticated', function () {
-        $middleware = createOrgMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('org_id', 'org123');
+    test('rejects a user with no memberships', function () {
+        $response = orgMiddleware()->handle(orgRequest(memberOf(), ['org_id' => 'org123']), fn () => response('OK'));
 
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'org_id');
-
-        expect($response->getStatusCode())->toBe(Response::HTTP_UNAUTHORIZED);
-        $data = json_decode($response->getContent(), true);
-        expect($data['error'])->toBe('Unauthorized');
+        expect($response->getStatusCode())->toBe(403);
     });
 
-    test('rejects request when org_id parameter missing', function () {
-        $user = mockUserWithOrgs();
+    test('rejects an unauthenticated request', function () {
+        $response = orgMiddleware()->handle(orgRequest(null, ['org_id' => 'org123']), fn () => response('OK'));
 
-        $middleware = createOrgMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'org_id');
-
-        expect($response->getStatusCode())->toBe(Response::HTTP_BAD_REQUEST);
-        $data = json_decode($response->getContent(), true);
-        expect($data['message'])->toContain('Missing organisation parameter');
+        expect($response->getStatusCode())->toBe(401);
     });
 
-    test('supports custom organisation parameter name', function () {
-        $user = mockUserWithOrgs([
-            [
-                'id' => 'org456',
-                'display_name' => 'Tech Corp',
-                'user_role' => 'admin',
-            ],
-        ]);
+    test('rejects a request without the org parameter', function () {
+        $response = orgMiddleware()->handle(orgRequest(memberOf('org123')), fn () => response('OK'));
 
-        $middleware = createOrgMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('orgId', 'org456');
+        expect($response->getStatusCode())->toBe(400);
+    });
 
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'orgId');
+    test('reads a custom parameter name', function () {
+        $response = orgMiddleware()->handle(orgRequest(memberOf('org123'), ['organisation' => 'org123']), fn () => response('OK'), 'organisation');
 
         expect($response->getStatusCode())->toBe(200);
     });
 
-    test('supports organisation data as objects', function () {
-        $user = mockUserWithOrgs();
-        // Convert arrays to objects
-        $orgs = [];
-        foreach ($user->orgs as $org) {
-            $orgs[] = (object) $org;
-        }
-        $user->orgs = $orgs;
+    test('rejects an object without membership helpers', function () {
+        $response = orgMiddleware()->handle(orgRequest((object) ['orgs' => ['org123']], ['org_id' => 'org123']), fn () => response('OK'));
 
-        $middleware = createOrgMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'org_id');
-
-        expect($response->getStatusCode())->toBe(200);
-    });
-
-    test('stores organisation id in request attributes', function () {
-        $user = mockUserWithOrgs();
-
-        $middleware = createOrgMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('org_id', 'org123');
-
-        $passedRequest = null;
-        $middleware->handle(
-            $request,
-            function ($req) use (&$passedRequest) {
-                $passedRequest = $req;
-
-                return response('OK');
-            },
-            'org_id',
-        );
-
-        expect($passedRequest->attributes->get('propelauth_org_id'))->toBe('org123');
-    });
-
-    test('handles missing user orgs array', function () {
-        $user = UserData::fromArray([
-            'userId' => 'user123',
-            'email' => 'test@example.com',
-            'emailConfirmed' => true,
-            'firstName' => 'John',
-            'lastName' => 'Doe',
-            'username' => 'johndoe',
-            'pictureUrl' => 'https://example.com/pic.jpg',
-            'properties' => [],
-            'locked' => false,
-            'enabled' => true,
-            'hasPassword' => true,
-            'updatePasswordRequired' => false,
-            'mfaEnabled' => false,
-            'canCreateOrgs' => true,
-            'createdAt' => 1609459200,
-            'lastActiveAt' => 1609459200,
-        ]);
-
-        $middleware = createOrgMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'org_id');
-
-        expect($response->getStatusCode())->toBe(Response::HTTP_FORBIDDEN);
-    });
-
-    test('handles missing orgs gracefully', function () {
-        $user = UserData::fromArray([
-            'userId' => 'user123',
-            'email' => 'test@example.com',
-            'emailConfirmed' => true,
-            'firstName' => 'John',
-            'lastName' => 'Doe',
-            'username' => 'johndoe',
-            'pictureUrl' => 'https://example.com/pic.jpg',
-            'properties' => [],
-            'locked' => false,
-            'enabled' => true,
-            'hasPassword' => true,
-            'updatePasswordRequired' => false,
-            'mfaEnabled' => false,
-            'canCreateOrgs' => true,
-            'createdAt' => 1609459200,
-            'lastActiveAt' => 1609459200,
-            // No orgs property
-        ]);
-
-        $middleware = createOrgMiddleware();
-        $request = Request::create('/', 'GET');
-        $request->attributes->set('propelauth_user', $user);
-        $request->attributes->set('org_id', 'org123');
-
-        $response = $middleware->handle($request, fn ($req) => response('OK'), 'org_id');
-
-        expect($response->getStatusCode())->toBe(Response::HTTP_FORBIDDEN);
-        $data = json_decode($response->getContent(), true);
-        expect($data['message'])->toContain('does not belong to organisation');
+        expect($response->getStatusCode())->toBe(403);
     });
 });

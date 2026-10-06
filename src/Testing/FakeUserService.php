@@ -3,8 +3,10 @@
 namespace LittleGreenMan\Earhart\Testing;
 
 use Illuminate\Support\Str;
+use LittleGreenMan\Earhart\Exceptions\InvalidTokenException;
 use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
 use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
+use LittleGreenMan\Earhart\PropelAuth\AccessToken;
 use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
 use LittleGreenMan\Earhart\Services\CacheService;
@@ -54,43 +56,62 @@ class FakeUserService extends UserService
         ], $attributes, ['userId' => $userId]);
     }
 
-    public function getUser(string $userId, bool $fresh = false): UserData
+    public function getUser(string $userId, bool $fresh = false, bool $includeOrgs = true): UserData
     {
-        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($userId) {
+        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($userId, $includeOrgs) {
             $this->requireUser($userId);
 
-            return $this->state->userData($userId);
+            return $this->state->userData($userId, $includeOrgs);
         });
     }
 
     public function validateToken(string $token): UserData
     {
+        return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->state->userData($this->tokenUserId($token)));
+    }
+
+    public function verifyAccessToken(string $token): AccessToken
+    {
         return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($token) {
-            $userId = $this->state->tokens[$token] ?? null;
+            $userId = $this->tokenUserId($token);
+            $user = $this->state->users[$userId];
 
-            if ($userId === null || ! isset($this->state->users[$userId])) {
-                throw InvalidUserException::notFound('current');
-            }
-
-            return $this->state->userData($userId);
+            return AccessToken::fromClaims([
+                'user_id' => $userId,
+                'email' => $user['email'],
+                'first_name' => $user['firstName'],
+                'last_name' => $user['lastName'],
+                'username' => $user['username'],
+                'legacy_user_id' => $user['legacyUserId'] ?? null,
+                'properties' => $user['properties'],
+                'org_id_to_org_member_info' => $this->state->orgInfo($userId),
+                'iss' => 'https://auth.example.test',
+                'iat' => now()->getTimestamp(),
+                'exp' => now()->addHour()->getTimestamp(),
+            ]);
         });
     }
 
-    public function getUserByEmail(string $email, bool $includeOrgs = true): UserData
+    public function forgetVerifierKey(): void
     {
-        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($email) {
+        //
+    }
+
+    public function getUserByEmail(string $email, bool $includeOrgs = true, ?string $isolatedOrgId = null): UserData
+    {
+        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($email, $includeOrgs) {
             $userId = $this->findBy('email', $email) ?? throw InvalidUserException::byEmail($email);
 
-            return $this->state->userData($userId);
+            return $this->state->userData($userId, $includeOrgs);
         });
     }
 
-    public function getUserByUsername(string $username, bool $includeOrgs = true): UserData
+    public function getUserByUsername(string $username, bool $includeOrgs = true, ?string $isolatedOrgId = null): UserData
     {
-        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($username) {
+        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($username, $includeOrgs) {
             $userId = $this->findBy('username', $username) ?? throw InvalidUserException::byUsername($username);
 
-            return $this->state->userData($userId);
+            return $this->state->userData($userId, $includeOrgs);
         });
     }
 
@@ -99,17 +120,21 @@ class FakeUserService extends UserService
         ?string $orderBy = 'CREATED_AT_DESC',
         int $pageNumber = 0,
         int $pageSize = 10,
+        ?string $legacyUserId = null,
+        bool $includeOrgs = false,
+        ?string $isolatedOrgId = null,
     ): PaginatedResult {
-        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($emailOrUsername, $orderBy, $pageNumber, $pageSize) {
-            $users = array_filter($this->state->users, fn (array $user) => $emailOrUsername === null
+        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($emailOrUsername, $orderBy, $pageNumber, $pageSize, $legacyUserId, $includeOrgs, $isolatedOrgId) {
+            $users = array_filter($this->state->users, fn (array $user) => ($emailOrUsername === null
                 || str_contains(strtolower($user['email']), strtolower($emailOrUsername))
-                || str_contains(strtolower((string) $user['username']), strtolower($emailOrUsername)));
+                || str_contains(strtolower((string) $user['username']), strtolower($emailOrUsername)))
+                && ($legacyUserId === null || ($user['legacyUserId'] ?? null) === $legacyUserId));
 
-            $items = array_map(fn (string $id) => $this->state->userData($id), array_keys($users));
+            $items = array_map(fn (string $id) => $this->state->userData($id, $includeOrgs), array_keys($users));
 
             return PaginatedResult::from(
                 $this->state->page($items, $pageNumber, $pageSize),
-                fn (int $nextPage) => $this->queryUsers($emailOrUsername, $orderBy, $nextPage, $pageSize),
+                fn (int $nextPage) => $this->queryUsers($emailOrUsername, $orderBy, $nextPage, $pageSize, $legacyUserId, $includeOrgs, $isolatedOrgId),
             );
         });
     }
@@ -122,13 +147,17 @@ class FakeUserService extends UserService
         ?string $username = null,
         ?array $properties = null,
         bool $sendConfirmationEmail = false,
+        ?bool $emailConfirmed = null,
+        ?bool $ignoreDomainRestrictions = null,
+        ?bool $askUserToUpdatePasswordOnLogin = null,
     ): string {
-        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($email, $password, $firstName, $lastName, $username, $properties) {
+        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($email, $password, $firstName, $lastName, $username, $properties, $emailConfirmed, $askUserToUpdatePasswordOnLogin) {
             $this->ensureEmailIsFree($email);
 
             return $this->store([
                 'email' => $email,
-                'emailConfirmed' => false,
+                'emailConfirmed' => $emailConfirmed ?? false,
+                'updatePasswordRequired' => $askUserToUpdatePasswordOnLogin ?? false,
                 'firstName' => $firstName,
                 'lastName' => $lastName,
                 'username' => $username,
@@ -148,10 +177,10 @@ class FakeUserService extends UserService
         ?bool $updatePasswordRequired = null,
         ?string $legacyUserId = null,
     ): bool {
-        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($userId, $firstName, $lastName, $username, $pictureUrl, $properties, $updatePasswordRequired) {
+        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($userId, $firstName, $lastName, $username, $pictureUrl, $properties, $updatePasswordRequired, $legacyUserId) {
             $this->requireUser($userId);
 
-            $changes = array_filter(compact('firstName', 'lastName', 'username', 'pictureUrl', 'updatePasswordRequired'), fn ($v) => $v !== null);
+            $changes = array_filter(compact('firstName', 'lastName', 'username', 'pictureUrl', 'updatePasswordRequired', 'legacyUserId'), fn ($v) => $v !== null);
 
             if ($properties !== null) {
                 $changes['properties'] = array_merge($this->state->users[$userId]['properties'], $properties);
@@ -191,6 +220,9 @@ class FakeUserService extends UserService
         ?string $redirectUrl = null,
         ?int $expiresInHours = 24,
         bool $createIfNotExists = false,
+        ?bool $expireAfterFirstUse = null,
+        ?bool $requiresInterstitial = null,
+        ?array $userSignupQueryParameters = null,
     ): string {
         return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($email, $createIfNotExists) {
             if ($this->findBy('email', $email) === null) {
@@ -295,11 +327,19 @@ class FakeUserService extends UserService
         ?string $lastName = null,
         ?string $username = null,
         ?array $properties = null,
+        ?bool $updatePasswordRequired = null,
+        ?bool $enabled = null,
+        ?string $pictureUrl = null,
     ): string {
-        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($email, $emailConfirmed, $existingPasswordHash, $existingMfaSecret, $firstName, $lastName, $username, $properties) {
+        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($email, $emailConfirmed, $existingUserId, $existingPasswordHash, $existingMfaSecret, $firstName, $lastName, $username, $properties, $updatePasswordRequired, $enabled, $pictureUrl) {
             $this->ensureEmailIsFree($email);
 
-            return $this->store([
+            return $this->store(array_filter([
+                'legacyUserId' => $existingUserId,
+                'updatePasswordRequired' => $updatePasswordRequired,
+                'enabled' => $enabled,
+                'pictureUrl' => $pictureUrl,
+            ], fn ($v) => $v !== null) + [
                 'email' => $email,
                 'emailConfirmed' => $emailConfirmed,
                 'firstName' => $firstName,
@@ -315,6 +355,17 @@ class FakeUserService extends UserService
     public function migrateUserPassword(string $userId, string $passwordHash): bool
     {
         return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->set($userId, ['hasPassword' => true]));
+    }
+
+    protected function tokenUserId(string $token): string
+    {
+        $userId = $this->state->tokens[preg_replace('/^Bearer\s+/i', '', trim($token))] ?? null;
+
+        if ($userId === null || ! isset($this->state->users[$userId])) {
+            throw InvalidTokenException::because('not issued by the fake');
+        }
+
+        return $userId;
     }
 
     protected function requireUser(string $userId): void

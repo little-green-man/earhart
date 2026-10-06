@@ -1,0 +1,12 @@
+{
+    "custom_role_mappings": [
+        {
+            "custom_role_mapping_name": "Business Plan",
+            "num_orgs_subscribed": 2
+        },
+        {
+            "custom_role_mapping_name": "Default",
+            "num_orgs_subscribed": 1
+        }
+    ]
+}

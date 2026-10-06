@@ -23,7 +23,13 @@ class OrganisationData extends Data
         #[WithCast(CarbonFromTimestampCast::class)]
         public ?\DateTime $createdAt = null,
         public ?array $metadata = null,
-        public ?int $maxOrgMembers = null,
+        public ?int $maxUsers = null,
+        public ?string $domain = null,
+        public ?string $legacyOrgId = null,
+        public ?bool $isolated = null,
+        public ?bool $passwordRotationEnabled = null,
+        public ?int $passwordRotationHistorySize = null,
+        public ?int $passwordRotationPeriod = null,
     ) {}
 
     /**
@@ -44,7 +50,13 @@ class OrganisationData extends Data
             customRoleMappingName: $data['customRoleMappingName'] ?? 'default',
             createdAt: isset($data['createdAt']) ? Carbon::createFromTimestamp($data['createdAt']) : null,
             metadata: $data['metadata'] ?? null,
-            maxOrgMembers: $data['maxOrgMembers'] ?? null,
+            maxUsers: $data['maxUsers'] ?? null,
+            domain: $data['domain'] ?? null,
+            legacyOrgId: $data['legacyOrgId'] ?? null,
+            isolated: $data['isolated'] ?? null,
+            passwordRotationEnabled: $data['passwordRotationEnabled'] ?? null,
+            passwordRotationHistorySize: $data['passwordRotationHistorySize'] ?? null,
+            passwordRotationPeriod: $data['passwordRotationPeriod'] ?? null,
         );
     }
 

@@ -27,11 +27,11 @@ class PaginatedResult
      */
     public static function from(array $data, \Closure $fetchNext): self
     {
-        $items = $data['items'] ?? $data['users'] ?? $data['orgs'] ?? [];
+        $items = $data['items'] ?? $data['users'] ?? $data['orgs'] ?? $data['invites'] ?? [];
 
         return new self(
             items: $items,
-            totalItems: $data['totalUsers'] ?? $data['totalOrgs'] ?? count($items),
+            totalItems: $data['totalUsers'] ?? $data['totalOrgs'] ?? $data['totalInvites'] ?? count($items),
             currentPage: $data['currentPage'] ?? 0,
             pageSize: $data['pageSize'] ?? 10,
             hasMoreResults: $data['hasMoreResults'] ?? false,

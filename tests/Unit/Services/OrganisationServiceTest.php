@@ -36,7 +36,7 @@ describe('OrganisationService', function () {
             'urlSafeOrgSlug' => 'acme-corp',
             'createdAt' => 1609459200,
             'metadata' => ['industry' => 'technology'],
-            'maxOrgMembers' => 100,
+            'maxUsers' => 100,
             'isSamlConfigured' => false,
             'customRoleMappingName' => 'default',
         ];
@@ -168,24 +168,31 @@ describe('OrganisationService', function () {
             });
         });
 
-        test('creates organisation with slug and metadata', function () {
+        test('sends the create fields PropelAuth accepts', function () {
             Http::fake([
-                'https://auth.example.com/api/backend/v1/org/' => Http::response(['orgId' => 'org_new']),
+                'https://auth.example.com/api/backend/v1/org/' => Http::response(['org_id' => 'org_new', 'name' => 'New Org']),
             ]);
 
-            $service = createOrganisationService();
-            $metadata = ['industry' => 'tech', 'size' => 'small'];
-            $orgId = $service->createOrganisation('New Org', slug: 'new-org', metadata: $metadata);
+            $orgId = createOrganisationService()->createOrganisation(
+                'New Org',
+                domain: 'acme.com',
+                enableAutoJoiningByDomain: true,
+                membersMustHaveMatchingDomain: false,
+                maxUsers: 100,
+                legacyOrgId: '1234',
+                customRoleMappingName: 'Business Plan',
+            );
 
             expect($orgId)->toBe('org_new');
-            Http::assertSent(function ($request) use ($metadata) {
-                $data = json_decode($request->body(), true);
-
-                return
-                    $data['name'] === 'New Org'
-                    && $data['url_safe_org_slug'] === 'new-org'
-                    && $data['metadata'] === $metadata;
-            });
+            Http::assertSent(fn ($request) => json_decode($request->body(), true) === [
+                'name' => 'New Org',
+                'domain' => 'acme.com',
+                'enable_auto_joining_by_domain' => true,
+                'members_must_have_matching_domain' => false,
+                'max_users' => 100,
+                'legacy_org_id' => '1234',
+                'custom_role_mapping_name' => 'Business Plan',
+            ]);
         });
     });
 
@@ -299,7 +306,7 @@ describe('OrganisationService', function () {
             ]);
 
             $service = createOrganisationService();
-            $result = $service->addUserToOrganisation('org123', 'user_123');
+            $result = $service->addUserToOrganisation('org123', 'user_123', 'Member');
 
             expect($result)->toBeTrue();
         });
@@ -310,13 +317,14 @@ describe('OrganisationService', function () {
             ]);
 
             $service = createOrganisationService();
-            $service->addUserToOrganisation('org123', 'user_123');
+            $service->addUserToOrganisation('org123', 'user_123', 'Admin', ['Member']);
 
-            Http::assertSent(function ($request) {
-                $data = json_decode($request->body(), true);
-
-                return $data['user_id'] === 'user_123' && $data['org_id'] === 'org123';
-            });
+            Http::assertSent(fn ($request) => json_decode($request->body(), true) === [
+                'org_id' => 'org123',
+                'user_id' => 'user_123',
+                'role' => 'Admin',
+                'additional_roles' => ['Member'],
+            ]);
         });
 
         test('sends role in request', function () {
@@ -383,7 +391,7 @@ describe('OrganisationService', function () {
             ]);
 
             $service = createOrganisationService();
-            $result = $service->inviteUserToOrganisation('org123', 'invite@example.com');
+            $result = $service->inviteUserToOrganisation('org123', 'invite@example.com', 'Member');
 
             expect($result)->toBeTrue();
         });
@@ -408,8 +416,8 @@ describe('OrganisationService', function () {
         test('fetches role mappings', function () {
             Http::fake([
                 'https://auth.example.com/api/backend/v1/custom_role_mappings' => Http::response([
-                    'roleMappings' => [
-                        ['id' => 'mapping1', 'name' => 'Custom Role'],
+                    'custom_role_mappings' => [
+                        ['custom_role_mapping_name' => 'Business Plan', 'num_orgs_subscribed' => 2],
                     ],
                 ]),
             ]);
@@ -417,7 +425,7 @@ describe('OrganisationService', function () {
             $service = createOrganisationService();
             $mappings = $service->getRoleMappings();
 
-            expect($mappings)->toBeArray()->toHaveLength(1);
+            expect($mappings)->toBe([['customRoleMappingName' => 'Business Plan', 'numOrgsSubscribed' => 2]]);
         });
     });
 
@@ -428,9 +436,10 @@ describe('OrganisationService', function () {
             ]);
 
             $service = createOrganisationService();
-            $result = $service->subscribeOrgToRoleMapping('org123', 'mapping1');
+            $result = $service->subscribeOrgToRoleMapping('org123', 'Paid Plan');
 
             expect($result)->toBeTrue();
+            Http::assertSent(fn ($request) => json_decode($request->body(), true) === ['custom_role_mapping_name' => 'Paid Plan']);
         });
     });
 
@@ -529,14 +538,17 @@ describe('OrganisationService', function () {
         test('fetches SAML metadata', function () {
             Http::fake([
                 'https://auth.example.com/api/backend/v1/saml_sp_metadata/org123' => Http::response([
-                    'metadata' => '<xml>metadata</xml>',
+                    'entity_id' => 'https://auth.example.com/saml/acme/metadata',
+                    'acs_url' => 'https://auth.example.com/saml/acme/acs',
+                    'logout_url' => 'https://auth.example.com/saml/acme/logout',
                 ]),
             ]);
 
-            $service = createOrganisationService();
-            $metadata = $service->fetchSAMLMetadata('org123');
+            $metadata = createOrganisationService()->fetchSAMLMetadata('org123');
 
-            expect($metadata)->toBe('<xml>metadata</xml>');
+            expect($metadata->entityId)->toBe('https://auth.example.com/saml/acme/metadata')
+                ->and($metadata->acsUrl)->toBe('https://auth.example.com/saml/acme/acs')
+                ->and($metadata->logoutUrl)->toBe('https://auth.example.com/saml/acme/logout');
         });
     });
 
@@ -546,9 +558,7 @@ describe('OrganisationService', function () {
                 'https://auth.example.com/api/backend/v1/saml_idp_metadata' => Http::response(['success' => true]),
             ]);
 
-            $service = createOrganisationService();
-            $metadata = '<xml>idp metadata</xml>';
-            $result = $service->setSAMLIdPMetadata('org123', $metadata);
+            $result = createOrganisationService()->setSAMLIdPMetadata('org123', 'https://idp/entity', 'https://idp/sso', 'CERT', 'Okta');
 
             expect($result)->toBeTrue();
         });
@@ -558,15 +568,15 @@ describe('OrganisationService', function () {
                 'https://auth.example.com/api/backend/v1/saml_idp_metadata' => Http::response(['success' => true]),
             ]);
 
-            $service = createOrganisationService();
-            $metadata = '<xml>idp metadata</xml>';
-            $service->setSAMLIdPMetadata('org123', $metadata);
+            createOrganisationService()->setSAMLIdPMetadata('org123', 'https://idp/entity', 'https://idp/sso', 'CERT', 'Okta');
 
-            Http::assertSent(function ($request) {
-                $data = json_decode($request->body(), true);
-
-                return $data['idp_metadata'] === '<xml>idp metadata</xml>';
-            });
+            Http::assertSent(fn ($request) => json_decode($request->body(), true) === [
+                'org_id' => 'org123',
+                'idp_entity_id' => 'https://idp/entity',
+                'idp_sso_url' => 'https://idp/sso',
+                'idp_certificate' => 'CERT',
+                'provider' => 'Okta',
+            ]);
         });
     });
 
