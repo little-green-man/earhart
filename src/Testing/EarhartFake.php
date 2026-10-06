@@ -180,7 +180,9 @@ class EarhartFake extends Earhart
             'type' => $phoneNumbers === [] ? 'Totp' : 'Phone',
             'phoneNumbers' => $phoneNumbers,
         ];
-        $this->state->users[$userId]['mfaEnabled'] = true;
+        if (isset($this->state->users[$userId])) {
+            $this->state->users[$userId]['mfaEnabled'] = true;
+        }
 
         return $this;
     }
