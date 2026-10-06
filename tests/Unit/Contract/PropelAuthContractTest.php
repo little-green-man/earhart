@@ -5,7 +5,9 @@ namespace LittleGreenMan\Earhart\Tests\Unit\Contract;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use LittleGreenMan\Earhart\Exceptions\FeatureNotEnabledException;
+use LittleGreenMan\Earhart\PropelAuth\StepUpGrantType;
 use LittleGreenMan\Earhart\Services\CacheService;
+use LittleGreenMan\Earhart\Services\MfaService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 use LittleGreenMan\Earhart\Services\UserService;
 use LittleGreenMan\Earhart\Tests\TestCase;
@@ -32,6 +34,11 @@ function contractUsers(): UserService
 function contractOrgs(): OrganisationService
 {
     return new OrganisationService('key', 'https://auth.example.com', new CacheService(false));
+}
+
+function contractMfa(): MfaService
+{
+    return new MfaService('key', 'https://auth.example.com', new CacheService(false));
 }
 
 /**
@@ -167,6 +174,87 @@ describe('requests match the Node SDK', function () {
             fn () => contractOrgs()->setSAMLIdPMetadata('o1', 'https://idp/e', 'https://idp/sso', 'CERT', 'Okta'),
             'POST', '/api/backend/v1/saml_idp_metadata', [],
             ['org_id' => 'o1', 'idp_entity_id' => 'https://idp/e', 'idp_sso_url' => 'https://idp/sso', 'idp_certificate' => 'CERT', 'provider' => 'Okta'],
+        ],
+        'batch fetch by IDs' => [
+            fn () => contractUsers()->getUsersByIds(['u1', 'u2'], includeOrgs: true),
+            'POST', '/api/backend/v1/user/user_ids', ['include_orgs' => 'true'], ['user_ids' => ['u1', 'u2']], [fixture('fetch_user')],
+        ],
+        'batch fetch by emails' => [
+            fn () => contractUsers()->getUsersByEmails(['a@b.com']),
+            'POST', '/api/backend/v1/user/emails', [], ['emails' => ['a@b.com']], [],
+        ],
+        'batch fetch by usernames' => [
+            fn () => contractUsers()->getUsersByUsernames(['ant']),
+            'POST', '/api/backend/v1/user/usernames', [], ['usernames' => ['ant']], [],
+        ],
+        'enable can create orgs' => [
+            fn () => contractUsers()->enableCanCreateOrgs('u1'),
+            'PUT', '/api/backend/v1/user/u1/can_create_orgs/enable', [], null,
+        ],
+        'disable can create orgs' => [
+            fn () => contractUsers()->disableCanCreateOrgs('u1'),
+            'PUT', '/api/backend/v1/user/u1/can_create_orgs/disable', [], null,
+        ],
+        'OAuth tokens' => [
+            fn () => contractUsers()->getOAuthTokens('u1'),
+            'GET', '/api/backend/v1/user/u1/oauth_token', [], null,
+        ],
+        'fresh OAuth token' => [
+            fn () => contractUsers()->getFreshOAuthToken('u1', 'google'),
+            'GET', '/api/backend/v1/user/u1/google/fresh_token', [], null, ['access_token' => 't', 'token_provider' => 'google'],
+        ],
+        'employee' => [
+            fn () => contractUsers()->getEmployeeEmail('e1'),
+            'GET', '/api/backend/v1/employee/e1', [], null, ['email' => 'staff@propelauth.com'],
+        ],
+        'invite by user ID' => [
+            fn () => contractOrgs()->inviteUserToOrganisationById('o1', 'u1', 'Admin', ['Member']),
+            'POST', '/api/backend/v1/invite_user_by_id', [], ['org_id' => 'o1', 'user_id' => 'u1', 'role' => 'Admin', 'additional_roles' => ['Member']],
+        ],
+        'set OIDC IdP metadata (Okta)' => [
+            fn () => contractOrgs()->setOIDCIdPMetadata('o1', 'cid', 'secret', 'Okta', true, oktaSsoDomain: 'example.okta.com'),
+            'POST', '/api/backend/v1/oidc_idp_metadata', [],
+            ['org_id' => 'o1', 'client_id' => 'cid', 'client_secret' => 'secret', 'uses_pkce' => true, 'idp_type' => 'Okta', 'okta_sso_domain' => 'example.okta.com'],
+        ],
+        'set OIDC IdP metadata (Generic)' => [
+            fn () => contractOrgs()->setOIDCIdPMetadata('o1', 'cid', 'secret', 'Generic', false, authUrl: 'https://idp/auth', tokenUrl: 'https://idp/token', userinfoUrl: 'https://idp/userinfo'),
+            'POST', '/api/backend/v1/oidc_idp_metadata', [],
+            ['org_id' => 'o1', 'client_id' => 'cid', 'client_secret' => 'secret', 'uses_pkce' => false, 'idp_type' => 'Generic',
+                'auth_url' => 'https://idp/auth', 'token_url' => 'https://idp/token', 'userinfo_url' => 'https://idp/userinfo'],
+        ],
+        'SCIM groups' => [
+            fn () => contractOrgs()->getScimGroups('o1', 'u1', 10, 0),
+            'GET', '/api/backend/v1/scim/o1/groups', ['user_id' => 'u1', 'page_size' => '10', 'page_number' => '0'], null,
+            ['total_groups' => 0, 'page_size' => 10, 'page_number' => 0, 'groups' => []],
+        ],
+        'SCIM group' => [
+            fn () => contractOrgs()->getScimGroup('o1', 'g1', 10, 0),
+            'GET', '/api/backend/v1/scim/o1/groups/g1', ['members_page_size' => '10', 'members_page_number' => '0'], null,
+            ['group_id' => 'g1', 'display_name' => 'Engineering', 'members' => []],
+        ],
+        'user MFA methods' => [
+            fn () => contractMfa()->getUserMfaMethods('u1'),
+            'GET', '/api/backend/v1/user/u1/mfa', [], null, ['mfa_setup' => null],
+        ],
+        'verify TOTP' => [
+            fn () => contractMfa()->verifyTotp('u1', '123456', 'DELETE_ACCOUNT', StepUpGrantType::TimeBased, 60),
+            'POST', '/api/backend/v1/mfa/step-up/verify-totp', [],
+            ['action_type' => 'DELETE_ACCOUNT', 'user_id' => 'u1', 'code' => '123456', 'grant_type' => 'TIME_BASED', 'valid_for_seconds' => 60],
+            ['step_up_grant' => 'g'],
+        ],
+        'send SMS code' => [
+            fn () => contractMfa()->sendSmsCode('u1', 'p1', 'DELETE_ACCOUNT'),
+            'POST', '/api/backend/v1/mfa/step-up/phone/send', [],
+            ['action_type' => 'DELETE_ACCOUNT', 'user_id' => 'u1', 'mfa_phone_id' => 'p1', 'grant_type' => 'ONE_TIME_USE', 'valid_for_seconds' => 300],
+            ['challenge_id' => 'c1'],
+        ],
+        'verify SMS code' => [
+            fn () => contractMfa()->verifySmsCode('u1', 'c1', '123456'),
+            'POST', '/api/backend/v1/mfa/step-up/phone/verify', [], ['challenge_id' => 'c1', 'user_id' => 'u1', 'code' => '123456'], ['step_up_grant' => 'g'],
+        ],
+        'verify grant' => [
+            fn () => contractMfa()->verifyGrant('u1', 'DELETE_ACCOUNT', 'g'),
+            'POST', '/api/backend/v1/mfa/step-up/verify-grant', [], ['action_type' => 'DELETE_ACCOUNT', 'user_id' => 'u1', 'grant' => 'g'],
         ],
         'fetch SAML SP metadata' => [
             fn () => contractOrgs()->fetchSAMLMetadata('o1'),

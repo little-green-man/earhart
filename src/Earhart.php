@@ -12,6 +12,7 @@ use LittleGreenMan\Earhart\PropelAuth\OrganisationsData;
 use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
 use LittleGreenMan\Earhart\Services\CacheService;
+use LittleGreenMan\Earhart\Services\MfaService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 use LittleGreenMan\Earhart\Services\UserService;
 use LittleGreenMan\Earhart\Testing\EarhartFake;
@@ -21,6 +22,8 @@ class Earhart
     protected UserService $userService;
 
     protected OrganisationService $organisationService;
+
+    protected MfaService $mfaService;
 
     protected CacheService $cacheService;
 
@@ -37,6 +40,7 @@ class Earhart
         $this->cacheService = new CacheService($enableCache, $cacheTtlMinutes);
         $this->userService = new UserService($apiKey, $authUrl, $this->cacheService);
         $this->organisationService = new OrganisationService($apiKey, $authUrl, $this->cacheService);
+        $this->mfaService = new MfaService($apiKey, $authUrl, $this->cacheService);
     }
 
     /**
@@ -486,6 +490,14 @@ class Earhart
     public function organisations(): OrganisationService
     {
         return $this->organisationService;
+    }
+
+    /**
+     * Get the step-up MFA service instance.
+     */
+    public function mfa(): MfaService
+    {
+        return $this->mfaService;
     }
 
     /**

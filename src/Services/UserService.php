@@ -10,6 +10,7 @@ use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
 use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\PropelAuth\AccessToken;
 use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
+use LittleGreenMan\Earhart\PropelAuth\SocialLoginToken;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
 
 class UserService extends BaseApiService
@@ -524,7 +525,145 @@ class UserService extends BaseApiService
         return true;
     }
 
+    /**
+     * Fetch several users by ID in one request. Unknown IDs are left out.
+     *
+     * @param  array<string>  $userIds
+     * @return array<string, UserData> Keyed by user ID
+     *
+     * @throws PropelAuthException On any API failure
+     */
+    public function getUsersByIds(array $userIds, bool $includeOrgs = false): array
+    {
+        return $this->fetchBatch('user_ids', $userIds, $includeOrgs, fn (UserData $user) => $user->userId);
+    }
+
+    /**
+     * Fetch several users by email in one request. Unknown emails are left out.
+     *
+     * @param  array<string>  $emails
+     * @return array<string, UserData> Keyed by email
+     *
+     * @throws PropelAuthException On any API failure
+     */
+    public function getUsersByEmails(array $emails, bool $includeOrgs = false): array
+    {
+        return $this->fetchBatch('emails', $emails, $includeOrgs, fn (UserData $user) => $user->email);
+    }
+
+    /**
+     * Fetch several users by username in one request. Unknown usernames are left out.
+     *
+     * @param  array<string>  $usernames
+     * @return array<string, UserData> Keyed by username
+     *
+     * @throws PropelAuthException On any API failure
+     */
+    public function getUsersByUsernames(array $usernames, bool $includeOrgs = false): array
+    {
+        return $this->fetchBatch('usernames', $usernames, $includeOrgs, fn (UserData $user) => (string) $user->username);
+    }
+
+    /**
+     * Allow a user to create organisations.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
+     */
+    public function enableCanCreateOrgs(string $userId): bool
+    {
+        $this->makeRequest('PUT', "/api/backend/v1/user/{$userId}/can_create_orgs/enable", notFound: fn () => InvalidUserException::notFound($userId));
+        $this->cache->invalidateUser($userId);
+
+        return true;
+    }
+
+    /**
+     * Stop a user creating organisations.
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
+     */
+    public function disableCanCreateOrgs(string $userId): bool
+    {
+        $this->makeRequest('PUT', "/api/backend/v1/user/{$userId}/can_create_orgs/disable", notFound: fn () => InvalidUserException::notFound($userId));
+        $this->cache->invalidateUser($userId);
+
+        return true;
+    }
+
+    /**
+     * The OAuth tokens PropelAuth holds for a user's social logins, keyed by provider (e.g. "google").
+     *
+     * @return array<string, SocialLoginToken>
+     *
+     * @throws InvalidUserException If the user does not exist
+     * @throws PropelAuthException On any other API failure
+     */
+    public function getOAuthTokens(string $userId): array
+    {
+        $response = $this->makeRequest('GET', "/api/backend/v1/user/{$userId}/oauth_token", notFound: fn () => InvalidUserException::notFound($userId));
+
+        $tokens = [];
+
+        foreach ($response as $provider => $token) {
+            if (is_array($token) && isset($token['accessToken'])) {
+                $tokens[$provider] = SocialLoginToken::fromArray($token, $provider);
+            }
+        }
+
+        return $tokens;
+    }
+
+    /**
+     * Have PropelAuth refresh and return a user's token for one social login provider.
+     *
+     * @param  string  $provider  e.g. google, github, microsoft, slack, salesforce, linkedin, apple
+     *
+     * @throws PropelAuthException On any API failure, including a user with no token for the provider
+     */
+    public function getFreshOAuthToken(string $userId, string $provider): SocialLoginToken
+    {
+        $response = $this->makeRequest('GET', "/api/backend/v1/user/{$userId}/{$provider}/fresh_token");
+
+        return SocialLoginToken::fromArray($response, $provider);
+    }
+
+    /**
+     * The email of a member of your PropelAuth team, e.g. the impersonator_user_id on an impersonated session.
+     *
+     * @throws PropelAuthException On any API failure, with status 404 for an unknown employee
+     */
+    public function getEmployeeEmail(string $employeeId): string
+    {
+        return $this->makeRequest('GET', "/api/backend/v1/employee/{$employeeId}")['email'];
+    }
+
     // Protected helper methods
+
+    /**
+     * @param  array<string>  $values
+     * @param  \Closure(UserData): string  $key
+     * @return array<string, UserData>
+     */
+    protected function fetchBatch(string $type, array $values, bool $includeOrgs, \Closure $key): array
+    {
+        if ($values === []) {
+            return [];
+        }
+
+        $endpoint = "/api/backend/v1/user/{$type}".($includeOrgs ? '?include_orgs=true' : '');
+        $response = $this->makeRequest('POST', $endpoint, [$type => array_values($values)]);
+
+        $users = [];
+
+        foreach ($response as $user) {
+            $user = UserData::fromArray($user);
+            $users[$key($user)] = $user;
+        }
+
+        return $users;
+    }
 
     /**
      * Fetch user from API (bypasses cache).

@@ -45,6 +45,7 @@ echo $user->emailConfirmed;  // true
   - [Managing Organization Members](#managing-organization-members)
   - [Organization Roles](#organization-roles)
   - [SAML Configuration](#saml-configuration)
+- [Step-Up MFA](#step-up-mfa)
 - [Pagination & Data Handling](#pagination--data-handling)
 - [Caching](#caching)
 - [Error Handling](#error-handling)
@@ -166,6 +167,17 @@ try {
 } catch (InvalidUserException $e) {
     echo "No user found with that username";
 }
+```
+
+#### Fetch Several Users at Once
+
+```php
+// One request; unknown IDs are left out. Keyed by user ID, email or username.
+$users = app('earhart')->users()->getUsersByIds(['user_1', 'user_2'], includeOrgs: true);
+$users = app('earhart')->users()->getUsersByEmails(['a@example.com', 'b@example.com']);
+$users = app('earhart')->users()->getUsersByUsernames(['ant', 'bea']);
+
+$users['user_1']->email;
 ```
 
 #### Query Users with Filters
@@ -418,6 +430,44 @@ $params = app('earhart')->getUserSignupParams('user_id_here');
 // Example: ['utm_source' => 'google', 'utm_campaign' => 'summer2024']
 ```
 
+#### Allow or Stop Creating Organisations
+
+```php
+app('earhart')->users()->enableCanCreateOrgs('user_id_here');
+app('earhart')->users()->disableCanCreateOrgs('user_id_here');
+```
+
+### Social Login Tokens
+
+> **API Reference**: [Social Login APIs](https://docs.propelauth.com/reference/api/social-login)
+
+PropelAuth keeps the OAuth tokens from a user's social logins, so you can call the provider's API on their behalf.
+
+```php
+$tokens = app('earhart')->users()->getOAuthTokens('user_id_here'); // Keyed by provider
+
+if (isset($tokens['google'])) {
+    $tokens['google']->accessToken;
+    $tokens['google']->authorizedScopes;
+    $tokens['google']->isExpired();
+}
+
+// Have PropelAuth refresh the token first
+$token = app('earhart')->users()->getFreshOAuthToken('user_id_here', 'google');
+```
+
+### PropelAuth Team Members
+
+When one of your team impersonates a user, the session's `impersonatorUserId` is their employee ID:
+
+```php
+$token = app('earhart')->verifyAccessToken($bearer);
+
+if ($token->isImpersonated()) {
+    $email = app('earhart')->users()->getEmployeeEmail($token->impersonatorUserId);
+}
+```
+
 ## Organisation Management
 
 > **PropelAuth Organisation API Reference**: [https://docs.propelauth.com/reference/api/org](https://docs.propelauth.com/reference/api/org)
@@ -578,6 +628,16 @@ app('earhart')->organisations()->inviteUserToOrganisation(
 );
 ```
 
+#### Invite an Existing User by ID
+
+```php
+app('earhart')->organisations()->inviteUserToOrganisationById(
+    orgId: 'org_id_here',
+    userId: 'user_id_here',
+    role: 'Member',
+);
+```
+
 #### Remove User from Organisation
 
 > **API Reference**: [Remove User from Org](https://docs.propelauth.com/reference/api/org#remove-user-from-org)
@@ -697,6 +757,24 @@ app('earhart')->organisations()->setSAMLIdPMetadata(
 );
 ```
 
+#### Set OIDC IdP Metadata
+
+For SSO through an OIDC identity provider instead of SAML:
+
+```php
+// Okta
+app('earhart')->organisations()->setOIDCIdPMetadata(
+    orgId: 'org_id_here',
+    clientId: '0oaulhbkt9YBiT3Pn697',
+    clientSecret: $secret,
+    idpType: 'Okta',
+    oktaSsoDomain: 'example.okta.com',
+);
+
+// Microsoft Entra: idpType 'Azure' with entraTenantId
+// Any other provider: idpType 'Generic' with authUrl, tokenUrl and userinfoUrl
+```
+
 #### Enable SAML Connection
 
 ```php
@@ -716,6 +794,25 @@ app('earhart')->organisations()->deleteSAMLConnection('org_id_here');
 app('earhart')->organisations()->disallowOrgToSetupSAML('org_id_here');
 ```
 
+### SCIM Groups
+
+> **API Reference**: [Fetch Org SCIM Groups](https://docs.propelauth.com/reference/api/enterprise-sso)
+
+Groups an organisation's identity provider has provisioned over SCIM:
+
+```php
+// All groups, or only those a user belongs to
+$groups = app('earhart')->organisations()->getScimGroups('org_id_here', userId: 'user_id_here');
+
+foreach ($groups->allPages() as $group) {
+    echo "{$group->displayName} ({$group->externalIdFromIdp})\n";
+}
+
+// One group with its members
+$group = app('earhart')->organisations()->getScimGroup('org_id_here', 'group_id_here');
+$group->memberUserIds;
+```
+
 ### Organisation Isolation
 
 #### Migrate Organisation to Isolated
@@ -731,6 +828,43 @@ app('earhart')->organisations()->migrateOrgToIsolated('org_id_here');
 **Note**: This is a one-way operation and cannot be reversed.
 
 **Use cases**: B2B SaaS with complete data isolation, enterprise customers requiring dedicated tenancy, or regulatory compliance (HIPAA, SOC2).
+
+## Step-Up MFA
+
+> **API Reference**: [Step-Up MFA APIs](https://docs.propelauth.com/reference/api/mfa)
+
+Ask a signed-in user for a fresh MFA code before a sensitive action. Verifying a code gives a grant; check the grant where the action happens. The action type is your own label and must match.
+
+```php
+use LittleGreenMan\Earhart\Exceptions\StepUpMfaException;
+use LittleGreenMan\Earhart\PropelAuth\StepUpGrantType;
+
+$mfa = app('earhart')->mfa();
+$setup = $mfa->getUserMfaMethods($userId); // null if the user has no MFA
+
+try {
+    if ($setup->usesTotp()) {
+        $grant = $mfa->verifyTotp($userId, $request->input('code'), 'DELETE_ACCOUNT');
+    } else {
+        // Send a code to one of the user's numbers, then verify it
+        $challengeId = $mfa->sendSmsCode($userId, array_key_first($setup->phoneNumbers), 'DELETE_ACCOUNT');
+        $grant = $mfa->verifySmsCode($userId, $challengeId, $request->input('code'));
+    }
+} catch (StepUpMfaException $e) {
+    if ($e->isIncorrectCode()) {
+        return back()->withErrors(['code' => 'That code is not right']);
+    }
+
+    throw $e;
+}
+
+// Later, where the action happens. A one-time grant is used up here.
+if (! $mfa->verifyGrant($userId, 'DELETE_ACCOUNT', $grant)) {
+    abort(403);
+}
+```
+
+Grants are one-time by default and valid for 300 seconds. Pass `grantType: StepUpGrantType::TimeBased` and `validForSeconds` to allow several actions within a window. If step-up MFA isn't on your PropelAuth plan, calls throw `FeatureNotEnabledException`.
 
 ## Pagination & Data Handling
 
@@ -957,6 +1091,17 @@ $token = $fake->issueToken($user->userId); // Accepted by validateToken(), verif
 $fake->withRolePermissions(['Admin' => ['propelauth::can_invite']]); // Roles default to Owner > Admin > Member
 ```
 
+Also for the newer endpoints:
+
+```php
+$fake->addOAuthToken($user->userId, 'google', 'access-token');
+$fake->addEmployee('employee_id', 'staff@example.com');
+$groupId = $fake->addScimGroup($org->orgId, 'Engineering', [$user->userId]);
+$fake->withMfa($user->userId);                      // Authenticator app
+$fake->withMfa($user->userId, ['phone_id' => '1234']); // SMS, numbers keyed by MFA phone ID
+$fake->withValidMfaCode('654321');                  // Defaults to 123456
+```
+
 Seeding is not recorded as a call.
 
 ### Behaviour
@@ -966,7 +1111,7 @@ The fake keeps state: `disableUser()` sets `enabled` to `false`, `deleteUser()` 
 ### Scripting failures
 
 ```php
-$fake->failNext(UserService::class, 500);           // Next UserService call throws PropelAuthException (500)
+$fake->failNext(UserService::class, 500);           // Next UserService call throws PropelAuthException (500); MfaService::class works too
 $fake->failNext('deleteUser', 429);                 // Next deleteUser() throws RateLimitException
 $fake->failNext('getUser', 403, times: 2);          // Next two getUser() calls throw UnauthorizedException
 $fake->failNext('getUser', InvalidUserException::notFound('x')); // Throw a specific exception
@@ -1149,107 +1294,28 @@ protected function schedule(Schedule $schedule)
 
 ## Missing Features & Limitations
 
-Some PropelAuth API features aren't yet implemented in Earhart:
+These PropelAuth APIs aren't implemented in Earhart yet:
 
-### User API Limitations
-
-1. **Isolated Org Support**: The `isolatedOrgId` parameter isn't supported in:
-   - `getUserByEmail()`
-   - `getUserByUsername()`
-   - `queryUsers()`
-
-2. **Legacy User ID Filtering**: `queryUsers()` doesn't support `legacyUserId` filtering
-
-3. **Create User Options**: Missing parameters:
-   - `ignoreDomainRestrictions`
-   - `emailConfirmed`
-   - `sendEmailToConfirmEmailAddress`
-
-4. **Employee API**: Cannot fetch employee information (used for impersonation tracking)
-   - Missing: `fetchEmployeeById()`
-
-5. **OAuth Tokens**: Cannot fetch OAuth tokens from social login providers
-   - Missing: Fetch user OAuth tokens endpoint
-
-### Organisation API Limitations
-
-1. **Create Organization**: Missing parameters:
-   - `domain`
-   - `enableAutoJoiningByDomain` (domain auto-join)
-   - `membersMustHaveMatchingDomain` (domain restrictions)
-   - `maxUsers`
-   - `customRoleMappingName`
-   - `legacyOrgId`
-
-2. **Update Organization**: Missing parameters:
-   - `domain`
-   - `extraDomains`
-   - `enableAutoJoiningByDomain`
-   - `membersMustHaveMatchingDomain`
-   - `maxUsers`
-   - `canSetupSaml`
-   - `legacyOrgId`
-   - `ssoTrustLevel`
-
-3. **Query Organizations**: Missing filter parameters:
-   - `legacyOrgId`
-   - `name` (search by name)
-   - `domain` (search by domain)
-
-4. **Get Organization Users**: Missing parameters:
-   - `role` (filter by role)
-   - `pageNumber` (only pageSize is supported)
-
-5. **Invite User by User ID**: Not implemented
-   - Missing: `inviteUserToOrgByUserId()`
-
-6. **Change User Role**: Missing `additionalRoles` parameter
-
-### API Key Management (Not Implemented)
-
-> **API Reference**: [API Key Reference](https://docs.propelauth.com/reference/api/apikey)
-
-The entire API Key management system for end-user/M2M keys isn't yet implemented:
-- `validateApiKey()` - Validate user/org API keys
-- `validatePersonalApiKey()` - Validate personal API keys
-- `validateOrgApiKey()` - Validate organization API keys
-- `createApiKey()` - Create API keys for users/orgs
-- `updateApiKey()` - Update API key metadata/expiration
-- `deleteApiKey()` - Delete/archive API keys
-- `fetchApiKey()` - Fetch API key by ID
-- `fetchCurrentApiKeys()` - List active API keys
-- `fetchArchivedApiKeys()` - List expired/archived API keys
-- `fetchApiKeyUsage()` - Get API key usage statistics
-- `importApiKey()` - Import API keys from external systems
-- `validateImportedApiKey()` - Validate imported API keys
-
-**Note**: These are separate from your PropelAuth API key used for backend integration. These endpoints manage API keys created by your end users.
-
-### Social Login & OAuth
-
-Not yet implemented:
-- Social login redirect URL generation
-- Social account linking
-- Fetching OAuth tokens from providers
+- **End-user API keys** ([reference](https://docs.propelauth.com/reference/api/apikey)): creating, validating, listing, importing and tracking usage of API keys your users create. These are separate from the PropelAuth API key Earhart itself uses.
+- **User and org insights** ([reference](https://docs.propelauth.com/reference/api/insights)): the user and org reports and chart metrics.
+- **Social login redirects and account linking**: these are browser flows; use the Socialite provider for login.
 
 ### Workarounds
 
-For missing features, make direct HTTP requests to the PropelAuth API:
+The services' `makeRequest()` handles authentication, retries, errors and case conversion, so a subclass can reach any endpoint:
 
 ```php
-use Illuminate\Support\Facades\Http;
+use LittleGreenMan\Earhart\Services\UserService;
 
-// Example: Create org with domain restrictions
-$response = Http::withToken(config('services.propelauth.api_key'))
-    ->post(config('services.propelauth.auth_url') . '/api/backend/v1/org/', [
-        'name' => 'Acme Inc',
-        'domain' => 'acme.com',
-        'enableAutoJoiningByDomain' => true,
-        'membersMustHaveMatchingDomain' => true,
-        'maxUsers' => 100,
-    ]);
-
-$orgId = $response->json()['orgId'];
+class AppUserService extends UserService
+{
+    public function topInviters(int $days = 30): array
+    {
+        return $this->makeRequest('GET', '/api/backend/v1/user_report/top_inviter', [
+            'reportInterval' => $days,
+        ])['userReports'] ?? [];
+    }
+}
 ```
 
 ### Feature Requests

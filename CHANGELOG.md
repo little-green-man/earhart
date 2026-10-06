@@ -2,6 +2,20 @@
 
 All notable changes to `earhart` will be documented in this file.
 
+## [3.1.0] - Unreleased
+
+### Added
+
+- Batch user fetch: `getUsersByIds()`, `getUsersByEmails()` and `getUsersByUsernames()`, one request each, keyed by ID, email or username
+- `enableCanCreateOrgs()` and `disableCanCreateOrgs()`
+- Social login tokens: `getOAuthTokens()` and `getFreshOAuthToken()`, returning `SocialLoginToken`
+- `getEmployeeEmail()`, e.g. to name the PropelAuth team member behind an impersonated session
+- `inviteUserToOrganisationById()`
+- `setOIDCIdPMetadata()` for SSO through Okta, Microsoft Entra or a generic OIDC provider
+- SCIM groups: `getScimGroups()` (paginated, optionally for one user) and `getScimGroup()` with members, returning `ScimGroup`
+- Step-up MFA: new `MfaService` (`Earhart::mfa()`) with `getUserMfaMethods()`, `verifyTotp()`, `sendSmsCode()`, `verifySmsCode()` and `verifyGrant()`; `StepUpGrantType`; `StepUpMfaException` for PropelAuth's MFA error codes
+- `EarhartFake` covers all of the above, with `addOAuthToken()`, `addEmployee()`, `addScimGroup()`, `withMfa()` and `withValidMfaCode()`
+
 ## [3.0.0] - 2026-10-06
 
 Contains breaking changes. See [UPGRADE-3.0.md](UPGRADE-3.0.md).

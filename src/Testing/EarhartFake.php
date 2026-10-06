@@ -2,11 +2,13 @@
 
 namespace LittleGreenMan\Earhart\Testing;
 
+use Illuminate\Support\Str;
 use LittleGreenMan\Earhart\Earhart;
 use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\Facades\PropelAuth;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationData;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
+use LittleGreenMan\Earhart\Services\MfaService;
 use LittleGreenMan\Earhart\Services\OrganisationService;
 use LittleGreenMan\Earhart\Services\UserService;
 use PHPUnit\Framework\Assert as PHPUnit;
@@ -36,6 +38,7 @@ class EarhartFake extends Earhart
         $this->state = new FakeState;
         $this->userService = new FakeUserService($this->state);
         $this->organisationService = new FakeOrganisationService($this->state);
+        $this->mfaService = new FakeMfaService($this->state);
     }
 
     // ============================================================
@@ -113,6 +116,77 @@ class EarhartFake extends Earhart
         return $this->fakeUsers()->issueToken($userId, $token);
     }
 
+    /**
+     * Store a social login token for a user, returned by getOAuthTokens() and getFreshOAuthToken().
+     *
+     * @param  list<string>  $authorizedScopes
+     */
+    public function addOAuthToken(string $userId, string $provider, string $accessToken = 'fake-access-token', ?string $refreshToken = null, array $authorizedScopes = []): static
+    {
+        $this->state->oauthTokens[$userId][$provider] = [
+            'tokenProvider' => $provider,
+            'accessToken' => $accessToken,
+            'refreshToken' => $refreshToken,
+            'tokenExpiration' => now()->addHour()->getTimestamp(),
+            'authorizedScopes' => $authorizedScopes,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * Add a PropelAuth team member for getEmployeeEmail().
+     */
+    public function addEmployee(string $employeeId, string $email): static
+    {
+        $this->state->employees[$employeeId] = $email;
+
+        return $this;
+    }
+
+    /**
+     * Add a SCIM group to an organisation. Returns the group ID.
+     *
+     * @param  list<string>  $memberUserIds
+     */
+    public function addScimGroup(string $orgId, string $displayName, array $memberUserIds = [], ?string $externalIdFromIdp = null, ?string $groupId = null): string
+    {
+        $groupId ??= (string) Str::uuid();
+        $this->state->scimGroups[$orgId][$groupId] = [
+            'displayName' => $displayName,
+            'externalIdFromIdp' => $externalIdFromIdp,
+            'members' => $memberUserIds,
+        ];
+
+        return $groupId;
+    }
+
+    /**
+     * Give a user MFA: an authenticator app, or SMS when phone numbers (suffixes keyed by phone ID) are given.
+     *
+     * @param  array<string, string>  $phoneNumbers
+     */
+    public function withMfa(string $userId, array $phoneNumbers = []): static
+    {
+        $this->state->mfa[$userId] = [
+            'type' => $phoneNumbers === [] ? 'Totp' : 'Phone',
+            'phoneNumbers' => $phoneNumbers,
+        ];
+        $this->state->users[$userId]['mfaEnabled'] = true;
+
+        return $this;
+    }
+
+    /**
+     * The code the fake accepts for TOTP and SMS step-up checks. Defaults to 123456.
+     */
+    public function withValidMfaCode(string $code): static
+    {
+        $this->state->validMfaCode = $code;
+
+        return $this;
+    }
+
     // ============================================================
     // Failures
     // ============================================================
@@ -120,7 +194,7 @@ class EarhartFake extends Earhart
     /**
      * Make the next call(s) fail.
      *
-     * @param  string  $target  A service class (UserService::class, OrganisationService::class) or a method name
+     * @param  string  $target  A service class (UserService::class, OrganisationService::class, MfaService::class) or a method name
      * @param  int|PropelAuthException  $failure  An HTTP status, mapped to the matching exception, or the exception to throw
      */
     public function failNext(string $target, int|PropelAuthException $failure = 500, int $times = 1): static
@@ -297,6 +371,7 @@ class EarhartFake extends Earhart
         app()->instance('earhart', $this);
         app()->instance(UserService::class, $this->userService);
         app()->instance(OrganisationService::class, $this->organisationService);
+        app()->instance(MfaService::class, $this->mfaService);
 
         PropelAuth::clearResolvedInstance('earhart');
 

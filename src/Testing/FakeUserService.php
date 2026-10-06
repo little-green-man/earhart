@@ -8,6 +8,7 @@ use LittleGreenMan\Earhart\Exceptions\InvalidUserException;
 use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\PropelAuth\AccessToken;
 use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
+use LittleGreenMan\Earhart\PropelAuth\SocialLoginToken;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
 use LittleGreenMan\Earhart\Services\CacheService;
 use LittleGreenMan\Earhart\Services\UserService;
@@ -355,6 +356,87 @@ class FakeUserService extends UserService
     public function migrateUserPassword(string $userId, string $passwordHash): bool
     {
         return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->set($userId, ['hasPassword' => true]));
+    }
+
+    public function getUsersByIds(array $userIds, bool $includeOrgs = false): array
+    {
+        return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->batch(
+            array_intersect(array_values($userIds), array_keys($this->state->users)),
+            $includeOrgs,
+            fn (UserData $user) => $user->userId,
+        ));
+    }
+
+    public function getUsersByEmails(array $emails, bool $includeOrgs = false): array
+    {
+        return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->batch(
+            array_filter(array_map(fn (string $email) => $this->findBy('email', $email), $emails)),
+            $includeOrgs,
+            fn (UserData $user) => $user->email,
+        ));
+    }
+
+    public function getUsersByUsernames(array $usernames, bool $includeOrgs = false): array
+    {
+        return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->batch(
+            array_filter(array_map(fn (string $username) => $this->findBy('username', $username), $usernames)),
+            $includeOrgs,
+            fn (UserData $user) => (string) $user->username,
+        ));
+    }
+
+    public function enableCanCreateOrgs(string $userId): bool
+    {
+        return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->set($userId, ['canCreateOrgs' => true]));
+    }
+
+    public function disableCanCreateOrgs(string $userId): bool
+    {
+        return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->set($userId, ['canCreateOrgs' => false]));
+    }
+
+    public function getOAuthTokens(string $userId): array
+    {
+        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($userId) {
+            $this->requireUser($userId);
+
+            return array_map(
+                fn (array $token) => SocialLoginToken::fromArray($token),
+                $this->state->oauthTokens[$userId] ?? [],
+            );
+        });
+    }
+
+    public function getFreshOAuthToken(string $userId, string $provider): SocialLoginToken
+    {
+        return $this->fake(__FUNCTION__, get_defined_vars(), function () use ($userId, $provider) {
+            $token = $this->state->oauthTokens[$userId][$provider]
+                ?? throw PropelAuthException::forStatus(404, 'PropelAuth API error: 404 on getFreshOAuthToken (fake)');
+
+            return SocialLoginToken::fromArray($token);
+        });
+    }
+
+    public function getEmployeeEmail(string $employeeId): string
+    {
+        return $this->fake(__FUNCTION__, get_defined_vars(), fn () => $this->state->employees[$employeeId]
+            ?? throw PropelAuthException::forStatus(404, 'PropelAuth API error: 404 on getEmployeeEmail (fake)'));
+    }
+
+    /**
+     * @param  array<string>  $userIds
+     * @return array<string, UserData>
+     */
+    protected function batch(array $userIds, bool $includeOrgs, \Closure $key): array
+    {
+        $users = [];
+
+        foreach ($userIds as $userId) {
+            $user = $this->state->userData($userId, $includeOrgs);
+            $users[$key($user)] = $user;
+        }
+
+        return $users;
     }
 
     protected function tokenUserId(string $token): string

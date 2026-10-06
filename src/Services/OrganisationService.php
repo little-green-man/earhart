@@ -7,6 +7,7 @@ use LittleGreenMan\Earhart\Exceptions\PropelAuthException;
 use LittleGreenMan\Earhart\PropelAuth\OrganisationData;
 use LittleGreenMan\Earhart\PropelAuth\PaginatedResult;
 use LittleGreenMan\Earhart\PropelAuth\SamlSpMetadata;
+use LittleGreenMan\Earhart\PropelAuth\ScimGroup;
 use LittleGreenMan\Earhart\PropelAuth\UserData;
 
 class OrganisationService extends BaseApiService
@@ -492,6 +493,107 @@ class OrganisationService extends BaseApiService
         $this->cache->invalidateOrganisation($orgId);
 
         return true;
+    }
+
+    /**
+     * Invite an existing user to an organisation by user ID.
+     *
+     * @param  list<string>  $additionalRoles
+     *
+     * @throws PropelAuthException On any API failure, with status 404 if the user or organisation does not exist
+     */
+    public function inviteUserToOrganisationById(string $orgId, string $userId, string $role, array $additionalRoles = []): bool
+    {
+        $this->makeRequest('POST', '/api/backend/v1/invite_user_by_id', array_filter([
+            'orgId' => $orgId,
+            'userId' => $userId,
+            'role' => $role,
+            'additionalRoles' => $additionalRoles,
+        ], fn ($v) => $v !== []));
+
+        return true;
+    }
+
+    /**
+     * Set up an organisation's SSO with an OIDC identity provider.
+     *
+     * @param  string  $idpType  Okta (needs $oktaSsoDomain), Azure (needs $entraTenantId) or Generic (needs the three URLs)
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
+     */
+    public function setOIDCIdPMetadata(
+        string $orgId,
+        string $clientId,
+        string $clientSecret,
+        string $idpType,
+        bool $usesPkce = true,
+        ?string $oktaSsoDomain = null,
+        ?string $entraTenantId = null,
+        ?string $authUrl = null,
+        ?string $tokenUrl = null,
+        ?string $userinfoUrl = null,
+    ): bool {
+        $this->makeRequest('POST', '/api/backend/v1/oidc_idp_metadata', array_filter([
+            'orgId' => $orgId,
+            'clientId' => $clientId,
+            'clientSecret' => $clientSecret,
+            'usesPkce' => $usesPkce,
+            'idpType' => $idpType,
+            'oktaSsoDomain' => $oktaSsoDomain,
+            'entraTenantId' => $entraTenantId,
+            'authUrl' => $authUrl,
+            'tokenUrl' => $tokenUrl,
+            'userinfoUrl' => $userinfoUrl,
+        ], fn ($v) => $v !== null), fn () => InvalidOrgException::notFound($orgId));
+        $this->cache->invalidateOrganisation($orgId);
+
+        return true;
+    }
+
+    /**
+     * List an organisation's SCIM groups, optionally only those a user belongs to.
+     *
+     * @return PaginatedResult Items are ScimGroup, without members
+     *
+     * @throws InvalidOrgException If the organisation does not exist
+     * @throws PropelAuthException On any other API failure
+     */
+    public function getScimGroups(string $orgId, ?string $userId = null, int $pageSize = 10, int $pageNumber = 0): PaginatedResult
+    {
+        $response = $this->makeRequest('GET', "/api/backend/v1/scim/{$orgId}/groups", array_filter([
+            'userId' => $userId,
+            'pageSize' => $pageSize,
+            'pageNumber' => $pageNumber,
+        ], fn ($v) => $v !== null), fn () => InvalidOrgException::notFound($orgId));
+
+        $total = $response['totalGroups'] ?? 0;
+        $currentPage = $response['pageNumber'] ?? $pageNumber;
+        $size = $response['pageSize'] ?? $pageSize;
+
+        return PaginatedResult::from([
+            'items' => array_map(fn (array $group) => ScimGroup::fromArray($group), $response['groups'] ?? []),
+            'totalUsers' => $total,
+            'currentPage' => $currentPage,
+            'pageSize' => $size,
+            'hasMoreResults' => ($currentPage + 1) * $size < $total,
+        ], fn (int $nextPage) => $this->getScimGroups($orgId, $userId, $pageSize, $nextPage));
+    }
+
+    /**
+     * Fetch one SCIM group with a page of its members.
+     *
+     * @throws InvalidOrgException If the organisation or group does not exist
+     * @throws PropelAuthException On any other API failure
+     */
+    public function getScimGroup(string $orgId, string $groupId, ?int $membersPageSize = null, ?int $membersPageNumber = null): ScimGroup
+    {
+        $response = $this->makeRequest('GET', "/api/backend/v1/scim/{$orgId}/groups/{$groupId}", array_filter([
+            'membersPageSize' => $membersPageSize,
+            'membersPageNumber' => $membersPageNumber,
+        ], fn ($v) => $v !== null), fn () => InvalidOrgException::notFound($orgId));
+
+        return ScimGroup::fromArray($response);
     }
 
     // Protected helper methods
